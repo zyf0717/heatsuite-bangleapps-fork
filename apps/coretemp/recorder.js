@@ -18,6 +18,8 @@
       fields : ["Core","Skin","Unit","HeartRate","HeatFlux","HeatStrainIndex","Battery","Quality"],
       getValues : () => {
         var r = [core,skin,unit,hr,heatflux,hsi,battery,quality];
+        // Recorder polls independently from BLE notifications; clear values
+        // after each sample so stale temperatures are not duplicated in logs.
         core = "";
         skin = "";
         unit="";

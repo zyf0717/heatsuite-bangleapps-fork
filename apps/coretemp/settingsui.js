@@ -10,6 +10,7 @@ exports.open = function (back) {
 
   function writeSetting(key, value) {
     store.write(function (nextSettings) {
+      // Full and partial logs are mutually exclusive settings.
       if (key === "debuglog" && value) delete nextSettings.debugpartiallog;
       if (key === "debugpartiallog" && value) delete nextSettings.debuglog;
       if (value === undefined || value === false) delete nextSettings[key];
@@ -53,6 +54,8 @@ exports.open = function (back) {
     var acquiredPower = false;
     var promise = Promise.resolve();
     if (!ensureRuntime()) return Promise.reject(new Error("CORESensor runtime is unavailable"));
+    // Settings actions borrow sensor power and release it afterward when no
+    // app/background owner already had the CORE runtime active.
     if (Bangle.setCORESensorPower && Bangle.isCORESensorOn && !Bangle.isCORESensorOn()) {
       Bangle.setCORESensorPower(1, OWNER);
       acquiredPower = true;
@@ -90,6 +93,8 @@ exports.open = function (back) {
 
 
   function normalizeHRMStatus(status) {
+    // Older runtime builds and tests may omit derived fields; normalize at the
+    // UI boundary so menu rendering stays tolerant of partial status objects.
     if (!status) status = {};
     if (!status.pairedSensors) status.pairedSensors = [];
     if (!status.lastScan) status.lastScan = [];
@@ -458,6 +463,8 @@ exports.open = function (back) {
     }, {
       timeout: 5000,
       active: true,
+      // Pairing scans only for CORE's custom service; the fallback thermometer
+      // profile is too generic to identify the device safely.
       filters: [{ services: ["00002100-5b1e-4347-b07c-97b514dae121"] }]
     });
   }

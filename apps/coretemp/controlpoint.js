@@ -28,6 +28,8 @@ function writeBytes(bytes) {
 function pumpQueue() {
   var req;
   var bytes;
+  // CORE accepts one control-point procedure at a time; keep later commands
+  // queued until the matching response or timeout resolves the active one.
   if (activeRequest || !requestQueue.length) return;
   req = requestQueue.shift();
   bytes = [req.opcode].concat(req.params);
@@ -85,6 +87,8 @@ exports.onNotification = function (dv) {
   var response = protocol.parseResponse(dv);
   var req;
 
+  // Responses are async BLE notifications, so verify both the response opcode
+  // and the original request opcode before resolving the active request.
   if (response.opCode !== protocol.OPCODES.RESPONSE) {
     log("Ignoring non-control point response", response.bytes);
     return;

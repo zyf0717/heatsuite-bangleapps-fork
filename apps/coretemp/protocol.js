@@ -70,6 +70,9 @@ exports.parseMeasurement = function (dv, batteryLevel) {
     qualityAndStateRaw: undefined
   };
 
+  // CORE's custom characteristic is a compact little-endian packet:
+  // flags, core temp, skin temp, heat flux, quality/state, HR, optional HSI.
+  // Truncated packets still return partial data so callers can log/debug them.
   if (hasBytes(2)) data.core = dv.getInt16(index, true) / 100;
   index += 2;
   if (hasBytes(2)) data.skin = dv.getInt16(index, true) / 100;
@@ -86,6 +89,7 @@ exports.parseMeasurement = function (dv, batteryLevel) {
     data.hsi = dv.getUint8(index) / 10;
   }
   if (qualityAndState !== undefined) {
+    // Low bits are CORE data quality; upper nibble carries external HR state.
     dataQuality = qualityAndState & 0x07;
     hrState = (qualityAndState >> 4) & 0x03;
     data.dataQuality = dataQuality;
@@ -101,9 +105,12 @@ exports.parseTemperatureMeasurement = function (dv, batteryLevel) {
   var raw;
   var core;
   if (dv.byteLength >= 5) {
+    // Bluetooth Health Thermometer uses IEEE-11073 FLOAT: signed 24-bit
+    // mantissa plus signed 8-bit base-10 exponent.
     raw = dv.getUint8(1) | (dv.getUint8(2) << 8) | (dv.getUint8(3) << 16);
     exponent = dv.getUint8(4);
     if (raw === 0x7FFFFF || raw === 0x7FFFFE || raw === 0x800002 || raw === 0x800000) {
+      // Reserved NaN/+INF/-INF/NRes values map to the app's existing n/a sentinel.
       core = 327.67;
     } else {
       mantissa = raw & 0x800000 ? raw - 0x1000000 : raw;

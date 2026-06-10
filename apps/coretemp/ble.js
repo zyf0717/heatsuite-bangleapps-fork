@@ -47,6 +47,8 @@ var activeProfile;
 var profileUpgradeTimer;
 var pauseOwners = [];
 
+// BLE lifecycle is driven by desired state plus one-shot pending flags. Public
+// actions enqueue a reconciliation pass instead of directly mutating transport.
 function log(text, param) {
   store.log(text, param);
 }
@@ -109,6 +111,7 @@ function waitForBleRebuildSettle(reason) {
 
 function clearPowerOwners() {
   if (typeof Bangle === "undefined" || !Bangle._PWR) return;
+  // setCORESensorPower follows Bangle's reference-counted owner convention.
   Bangle._PWR.CORESensor = [];
 }
 
@@ -156,6 +159,9 @@ function isPaused() {
 }
 
 function shouldAttemptProfileUpgrade() {
+  // Some devices initially expose only the standard thermometer profile. Keep
+  // that connection alive, then periodically rebuild discovery to pick up the
+  // richer custom CORE profile when it becomes visible.
   return activeProfile === "health_thermometer" &&
     !isCustomProfileOnly() &&
     shouldBeConnected &&
@@ -221,6 +227,8 @@ function isCustomProfileOnly() {
 }
 
 function isSupportedService(uuid) {
+  // customprofileonly is a diagnostic escape hatch: ignore the fallback
+  // Health Thermometer profile so discovery failures expose custom-profile bugs.
   if (isCustomProfileOnly() && normalizeUuid(uuid) === protocol.HEALTH_THERMOMETER_SERVICE_UUID) return false;
   return protocol.SUPPORTED_SERVICES.indexOf(normalizeUuid(uuid)) >= 0;
 }
@@ -302,6 +310,8 @@ function setControlPointCharacteristic(characteristic) {
 
 function addNotificationHandler(characteristic) {
   var uuid = normalizeUuid(characteristic.uuid);
+  // Cached characteristics can be reattached across reconnects; mark the object
+  // so repeated attach attempts do not register duplicate notification handlers.
   if (characteristic._coretempHandlerAdded) return;
   characteristic._coretempHandlerAdded = true;
   characteristic.on("characteristicvaluechanged", function (ev) {
@@ -332,6 +342,8 @@ function characteristicsFromCache(currentDevice) {
   var uuid;
   if (!cache || !cache.characteristics) return restored;
   log("Read cached characteristics");
+  // Espruino exposes BluetoothRemoteGATTCharacteristic enough for handle-based
+  // reconstruction, avoiding full service discovery on every reconnect.
   for (uuid in cache.characteristics) {
     if (!cache.characteristics.hasOwnProperty(uuid)) continue;
     cached = cache.characteristics[uuid];
@@ -394,6 +406,8 @@ function preferCustomCoreTemperature(chars) {
     if (normalizeUuid(characteristic.uuid) === protocol.CORE_TEMP_UUID) hasCustomTemperature = true;
   });
   if (!customOnly && !hasCustomTemperature) return chars;
+  // Prefer the custom CORE stream whenever present; the standard Health
+  // Thermometer value lacks skin temp, HR, heat flux, HSI, and quality bits.
   return chars.filter(function (characteristic) {
     var uuid = normalizeUuid(characteristic.uuid);
     if (customOnly && uuid === protocol.TEMPERATURE_MEASUREMENT_UUID) {
@@ -436,6 +450,8 @@ function createCharacteristicPromise(characteristic) {
           log("Notifications started", { uuid: uuid, role: describeCharacteristicRole(uuid) });
         })
         .then(function () {
+          // Give the watch BLE stack time to finish enabling CCCDs before the
+          // next characteristic operation; without this, writes can race setup.
           return waitingPromise(3000);
         });
     });
@@ -517,6 +533,8 @@ function discoverCharacteristics(currentGatt) {
 function attachCachedOrDiscover() {
   var usedCache = false;
   var currentGatt = gatt;
+  // Pairing deliberately bypasses saved handles because the target device may
+  // differ from the previously paired CORE.
   if (activePairTarget) return discoverCharacteristics(currentGatt);
   if (!characteristics.length) {
     characteristics = characteristicsFromCache(device);
@@ -544,6 +562,8 @@ function resetTransportState(reason) {
   characteristics = [];
   batteryLevel = 0;
   activeProfile = undefined;
+  // A future requestDevice call may return the same object; allow its disconnect
+  // handler to be installed again after transport state is rebuilt.
   if (device) device._coretempDisconnectHandlerAdded = false;
   gatt = undefined;
   device = undefined;
@@ -570,6 +590,8 @@ function cleanupGatt(reason) {
 }
 
 function scheduleReconnect(reason) {
+  // Capture the current delay before increasing it so the first retry is quick
+  // while subsequent failures back off up to RECONNECT_DELAY_MAX_MS.
   var delay = reconnectDelayMs;
   if (isPaused()) {
     clearReconnectTimer();
@@ -597,6 +619,8 @@ function scheduleReconnect(reason) {
 
 function enqueueLifecycle(kind, mutator) {
   if (mutator) mutator();
+  // Serialize lifecycle work. BLE connect/disconnect/discovery operations are
+  // fragile when overlapped, and each queued pass reconciles the latest flags.
   lifecycleQueue = lifecycleQueue.then(function () {
     activeLifecycleTask = { kind: kind };
     log("Lifecycle task start", kind);
@@ -842,6 +866,8 @@ function reconcileLifecycle(kind) {
     setCoreState(CORE_STATE.DISCONNECTING, "pair target");
     cleanupGatt("pair target");
     return waitForBleSettle("pair target").then(function () {
+      // Move the pending target into activePairTarget for the duration of
+      // discovery so cache use and status handling know this is a pair attempt.
       var pairTarget = pendingPairTarget;
       pendingPairTarget = undefined;
       activePairTarget = pairTarget;
@@ -945,6 +971,8 @@ function isConnected() {
 function runWithTemporaryPower(owner, fn) {
   var acquiredPower = false;
   var promise;
+  // Settings/debug actions need a live connection but should not leave the
+  // sensor powered after they finish unless another owner already held power.
   if (!isOn()) {
     setPower(1, owner);
     acquiredPower = true;
@@ -964,6 +992,8 @@ function runWithTemporaryPower(owner, fn) {
 }
 
 function onDisconnect(disconnectedDevice, reason) {
+  // cleanupGatt intentionally disconnects; ignore that event so requested
+  // disconnects do not schedule a reconnect.
   if (expectedDisconnectDevice && expectedDisconnectDevice === disconnectedDevice) {
     expectedDisconnectDevice = undefined;
     log("Ignoring expected disconnect", reason);
@@ -1156,6 +1186,8 @@ function setPower(isOnValue, app) {
     });
   }
   if (Bangle._PWR.CORESensor.length > 0) {
+    // Transient owners borrow power for settings operations. They should not
+    // override a pending disconnect/unpair or create background desire alone.
     if (isTransientOwner(app)) return;
     if (!pendingDisconnect && !pendingUnpair) shouldBeConnected = true;
     if (isPaused()) {

@@ -17,6 +17,7 @@ function flushLog() {
   if (!logBuffer.length) return;
   while (logBuffer.length > LOG_MAX_LINES) logBuffer.shift();
   try {
+    // Append in batches to reduce flash writes during frequent BLE notifications.
     require("Storage").open(LOG_FILE, "a").write(logBuffer.join("\n") + "\n");
   } catch (e) {
     // ignore storage write failures
@@ -38,6 +39,8 @@ function setDebug(enabled, partial) {
 
 function log(text, param) {
   if (!logEnabled) return;
+  // Partial logging keeps lifecycle/control-point diagnostics but omits the
+  // high-rate measurement stream.
   if (logPartial && text === "data") return;
   var line = new Date().toISOString() + " - " + text;
   if (param !== undefined) line += ": " + JSON.stringify(param);

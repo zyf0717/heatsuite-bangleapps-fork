@@ -55,6 +55,8 @@ function getScanWindowMs() {
 }
 
 function normalizeAntId(id) {
+  // Accept UI/persisted decimal strings, but keep the ANT device id bounded to
+  // the 24 bits CORE accepts for pair requests.
   if (typeof id === "string" && /^\d+$/.test(id.trim())) id = parseInt(id, 10);
   if (typeof id !== "number" || isNaN(id) || (id | 0) !== id) return undefined;
   if (id <= 0 || id > 0xFFFFFF) return undefined;
@@ -86,6 +88,8 @@ function normalizeEntry(entry) {
 
 function readConfig() {
   var config = require("Storage").readJSON(HRM_FILE, 1) || {};
+  // HRM choices live outside coretemp.json so resetting BLE pairing/cache can
+  // be handled independently from the user's recent ANT+ sensor list.
   hrmState.selected = normalizeEntry(config.selected);
   hrmState.recent = (config.recent || []).map(normalizeEntry).filter(function (entry) {
     return !!entry;
@@ -153,6 +157,8 @@ function queryPairedEntries() {
       var entries = [];
       var promise = Promise.resolve();
       var i;
+      // Control-point requests must stay serialized; build an explicit promise
+      // chain rather than issuing all entry reads concurrently.
       for (i = 0; i < count; i++) {
         (function (index) {
           promise = promise.then(function () {
@@ -192,6 +198,8 @@ function runOperation(name, fn) {
   if (hrmState.busy) {
     return Promise.reject(new Error("HRM operation already in progress"));
   }
+  // Scan, pair, clear, and status all share the CORE control point. A module
+  // level operation lock keeps UI actions from interleaving multi-step flows.
   hrmState.busy = true;
   hrmState.operation = name;
   hrmState.lastError = null;
@@ -261,6 +269,8 @@ exports.scanANT = function () {
       var found = [];
       var promise = Promise.resolve();
       var i;
+      // As with paired-entry reads, CORE returns scan entries by index through
+      // the single control point instead of in the count response.
       for (i = 0; i < count; i++) {
         (function (index) {
           promise = promise.then(function () {
