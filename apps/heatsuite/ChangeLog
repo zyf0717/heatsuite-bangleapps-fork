@@ -18,3 +18,5 @@
       `heatsuite.app.js` made scanning faster for devices (1s scan time)
       `heatsuite.surveylib.js` changed to be more standalone, with more UI options (see docs)
 0.13: Package starter settings/tasks/survey data and simplify CoreTemp reset/forget workflow
+      `heatsuite.surveylib.js` added a right hand scroll bar for questions where the responses exceed the screen space
+      `heatsuite.wid.js` fixed charging notification issue
