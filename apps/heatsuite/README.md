@@ -54,8 +54,8 @@ _Note: This will only show when a bluetooth device is associated with a task._
 ## CORE Sensor recording
 
 HeatSuite installs CoreTemp as the CORE BLE runtime provider, but CORE recording
-is off by default. Enable the `CORE Sensor` recorder in HeatSuite settings when
-CORE samples should be included in HeatSuite minute data. HeatSuite does not
+is on by default. Disable the `CORE Sensor` recorder in HeatSuite settings when
+CORE samples should not be included in HeatSuite minute data. HeatSuite does not
 turn on CoreTemp's standalone background `Enable` setting.
 
 ## Why does swiping right open the HeatSuite App?

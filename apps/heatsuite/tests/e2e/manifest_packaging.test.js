@@ -31,7 +31,7 @@ module.exports = [
       const settings = JSON.parse(fs.readFileSync(path.join(root, "heatsuite.settings.json"), "utf8"));
       assert.ok(Array.isArray(settings.record));
       assert.ok(settings.record.includes("bat"));
-      assert.strictEqual(settings.record.includes("CORESensor"), false);
+      assert.strictEqual(settings.record.includes("CORESensor"), true);
     }
   },
   {
@@ -45,7 +45,7 @@ module.exports = [
       const customSettings = Function("return " + match[1])();
 
       assert.deepStrictEqual(customSettings.record, settings.record);
-      assert.strictEqual(customSettings.record.includes("CORESensor"), false);
+      assert.strictEqual(customSettings.record.includes("CORESensor"), true);
     }
   }
 ];

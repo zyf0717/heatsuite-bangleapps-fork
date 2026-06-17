@@ -2,7 +2,7 @@ var DEFAULT_SETTINGS = {
     DEBUG: false,
     SAVE_DEBUG: false,
     notifications: true,
-    record: ["bat", "steps", "hrm", "baro", "acc"],
+    record: ["bat", "steps", "hrm", "baro", "acc", "CORESensor"],
     filePrefix: "htst",
     GPS: true,
     GPSAdaptiveTime: 2,
