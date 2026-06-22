@@ -24,6 +24,8 @@ function onCore(c) {
   if (!c) return;
   // Large or small font
   var sz = ((process.env.HWVERSION == 1) ? 3 : 2);
+  g.reset();
+  if (g.setBgColor) g.setBgColor(g.theme.bg);
   g.setFontAlign(0, 0);
   g.clearRect(0, 32 + 48, g.getWidth(), 32 + 48 + 24 * 4);
   g.setColor(g.theme.dark ? "#CCC" : "#333");  // gray
@@ -39,10 +41,14 @@ function onCore(c) {
 }
 
 function drawBackground(message) {
+  g.reset();
+  if (g.setBgColor) g.setBgColor(g.theme.bg);
   g.clear();
   Bangle.loadWidgets();
   Bangle.drawWidgets();
-  g.reset().setFont("6x8", 2).setFontAlign(0, 0);
+  g.reset();
+  if (g.setBgColor) g.setBgColor(g.theme.bg);
+  g.setFont("6x8", 2).setFontAlign(0, 0);
   g.drawImage(corelogo, px - 146 / 2, 30);
   g.drawString(message, g.getWidth() / 2, g.getHeight() / 2 + 16);
 }

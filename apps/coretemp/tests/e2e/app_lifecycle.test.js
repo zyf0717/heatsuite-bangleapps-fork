@@ -4,14 +4,17 @@ const fakeStorage = require("../helpers/fake_storage");
 
 function createGraphics() {
   return {
-    theme: { dark: false },
+    theme: { bg: "#fff", dark: false },
+    clears: [],
+    bgColor: undefined,
     getWidth() { return 176; },
     getHeight() { return 176; },
-    clear() { return this; },
+    clear() { this.clears.push({ type: "clear", bgColor: this.bgColor }); return this; },
     reset() { return this; },
+    setBgColor(color) { this.bgColor = color; return this; },
     setFont() { return this; },
     setFontAlign() { return this; },
-    clearRect() { return this; },
+    clearRect() { this.clears.push({ type: "clearRect", bgColor: this.bgColor }); return this; },
     setColor() { return this; },
     drawString() { return this; },
     drawImage() { return this; }
@@ -73,6 +76,7 @@ module.exports = [
           powerCalls.push([on, owner]);
         }
       };
+      const graphics = createGraphics();
       const loaded = loader.create({
         storage,
         globals: {
@@ -82,7 +86,7 @@ module.exports = [
               if (name === "kill") killHandler = handler;
             }
           },
-          g: createGraphics(),
+          g: graphics,
           atob() {
             return "";
           },
@@ -108,6 +112,12 @@ module.exports = [
       assert.strictEqual(typeof listeners.CORESensor, "function");
       assert.deepStrictEqual(powerCalls, [[1, "COREAPP"]]);
       assert.strictEqual(storage.readJSON("coretemp.json", 1).enabled, false);
+      assert.strictEqual(graphics.clears[0].bgColor, "#fff");
+
+      graphics.setBgColor("#0f0");
+      listeners.CORESensor({ core: 37.1, skin: 35.2, unit: "C", hsiValid: false, battery: 80 });
+
+      assert.strictEqual(graphics.clears[graphics.clears.length - 1].bgColor, "#fff");
 
       killHandler();
 
