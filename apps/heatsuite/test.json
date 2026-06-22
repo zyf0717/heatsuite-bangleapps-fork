@@ -1,0 +1,56 @@
+{
+  "app": "heatsuite",
+  "allowCustomApp": true,
+  "tests": [
+    {
+      "description": "HeatSuite installs packaged defaults and modules",
+      "steps": [
+        {
+          "t": "assert",
+          "js": "!!require('Storage').read('HSModule')",
+          "is": "true",
+          "text": "HeatSuite module is installed"
+        },
+        {
+          "t": "assert",
+          "js": "!!require('Storage').read('survey')",
+          "is": "true",
+          "text": "Survey library is installed"
+        },
+        {
+          "t": "assert",
+          "js": "!!require('Storage').read('heatsuite.bp.js')",
+          "is": "true",
+          "text": "Blood pressure task app is installed"
+        },
+        {
+          "t": "assert",
+          "js": "require('Storage').readJSON('heatsuite.settings.json', 1).filePrefix",
+          "is": "equal",
+          "to": "\"htst\"",
+          "text": "Packaged settings use the default file prefix"
+        },
+        {
+          "t": "assert",
+          "js": "require('Storage').readJSON('heatsuite.tasks.json', 1).length",
+          "is": "equal",
+          "to": "0",
+          "text": "Packaged task list starts empty"
+        },
+        {
+          "t": "assert",
+          "js": "typeof require('HSModule').getSettings",
+          "is": "equal",
+          "to": "\"function\"",
+          "text": "HeatSuite module exposes settings loader"
+        },
+        {
+          "t": "assert",
+          "js": "require('HSModule').getSettings().record.includes('CORESensor')",
+          "is": "true",
+          "text": "Default recorder set includes CORE sensor"
+        }
+      ]
+    }
+  ]
+}
