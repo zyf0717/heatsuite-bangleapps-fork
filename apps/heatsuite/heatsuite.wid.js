@@ -1014,16 +1014,20 @@
 
   //widget stuff
   var iconWidth = 44;
+  var iconHeight = 24;
   function draw() {
+    var x = this.x, y = this.y;
     g.reset();
+    g.setClipRect(x, y, x + iconWidth - 1, y + iconHeight - 1);
     g.setColor(cache.taskQueue === undefined ? "#fff" : cache.taskQueue.length > 0 ? "#f00" : "#0f0");
     g.setFontAlign(0, 0);
-    g.fillRect({ x: this.x, y: this.y, w: this.x + iconWidth - 1, h: this.y + 23, r: 8 });
+    g.fillRect({ x: x, y: y, w: iconWidth, h: iconHeight, r: 8 });
     g.setColor(-1);
     g.setFont("Vector", 12);
-    g.drawImage(atob("FBfCAP//AADk+kPKAAAoAAAAAKoAAAAAKAAAAFQoFQAAVTxVAFQVVVQVRABVABFVEBQEVQBUABUAAFUAVQCoFVVUKogAVQAiqBVVVCoAVQBVAABUABUAVRAUBFVEAFUAEVQVVVQVAFU8VQAAVCgVAAAAKAAAAACqAAAAACgAAA=="), this.x + 1, this.y + 1);
+    g.drawImage(atob("FBfCAP//AADk+kPKAAAoAAAAAKoAAAAAKAAAAFQoFQAAVTxVAFQVVVQVRABVABFVEBQEVQBUABUAAFUAVQCoFVVUKogAVQAiqBVVVCoAVQBVAABUABUAVRAUBFVEAFUAEVQVVVQVAFU8VQAAVCgVAAAAKAAAAACqAAAAACgAAA=="), x + 1, y + 1);
     g.setColor((Bangle.hasOwnProperty("isBTHRMConnected") && Bangle.isBTHRMConnected()) ? "#00F" : "#888");
-    g.drawImage(atob("EhCCAAKoAqgCqqiqqCqqqqqqqqqqqqqqqqqqqqqqqqqqqqqiqqqqqAqqqqoAKqqqgACqqqAAAqqoAAAKqgAAACqAAAAAoAAAAAoAAA=="), this.x + 22, this.y + 3);
+    g.drawImage(atob("EhCCAAKoAqgCqqiqqCqqqqqqqqqqqqqqqqqqqqqqqqqqqqqiqqqqqAqqqqoAKqqqgACqqqAAAqqoAAAKqgAAACqAAAAAoAAAAAoAAA=="), x + 22, y + 3);
+    g.setClipRect(0, 0, g.getWidth() - 1, g.getHeight() - 1);
 
   }
   WIDGETS.heatsuite = {
