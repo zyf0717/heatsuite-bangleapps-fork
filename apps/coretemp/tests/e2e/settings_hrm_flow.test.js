@@ -346,6 +346,92 @@ module.exports = [
     }
   },
   {
+    name: "default HRM pairing confirms re-pair for same paired HRM",
+    async fn() {
+      let currentMenu;
+      let replaceFlag;
+      const prompts = [];
+      const Bangle = {
+        CORESensorPair() {},
+        CORESensorConnect() { return Promise.resolve(); },
+        CORESensorUnpair() { return Promise.resolve(); },
+        CORESensorHRMGetState() {
+          return {
+            selected: { antId: 0x1234, transport: "ANT+" },
+            pairedSensors: [],
+            recent: [],
+            pairedCount: 0,
+            paired: false,
+            busy: false
+          };
+        },
+        CORESensorHRMGetStatus() {
+          return Promise.resolve({
+            pairedSensors: [{ antId: 0x1234, transport: "ANT+" }],
+            recent: [],
+            pairedCount: 1,
+            paired: true
+          });
+        },
+        CORESensorHRMPairANT(entry, replaceExisting) {
+          replaceFlag = replaceExisting;
+          return Promise.resolve({
+            pairedSensors: [entry],
+            pairedCount: 1,
+            paired: true,
+            syncState: "paired",
+            selected: entry
+          });
+        },
+        isCORESensorOn() { return true; },
+        setCORESensorPower() {}
+      };
+      const E = {
+        showMenu(menu) {
+          currentMenu = menu;
+        },
+        showAlert() {
+          return Promise.resolve();
+        },
+        showPrompt(text) {
+          prompts.push(text);
+          return Promise.resolve(true);
+        },
+        showMessage() {}
+      };
+      const storage = fakeStorage.create({
+        "coretemp.json": {
+          btid: "core-1",
+          btname: "CORE"
+        }
+      });
+      const loaded = loader.create({
+        storage,
+        globals: { Bangle, E, NRF: {} },
+        overrides: {
+          "coretemp.store": {
+            read() { return storage.readJSON("coretemp.json", 1) || {}; },
+            write(mutator) {
+              const next = storage.readJSON("coretemp.json", 1) || {};
+              mutator(next);
+              storage.writeJSON("coretemp.json", next);
+              return next;
+            },
+            log() {}
+          }
+        }
+      });
+
+      loaded.require("coretemp.settingsui").open(function () {});
+      currentMenu["HRM (ANT+)"]();
+      currentMenu["Preset HRM"]();
+      await currentMenu["Pair"]();
+
+      assert.match(prompts[0], /Re-pair existing\nHRM/);
+      assert.strictEqual(replaceFlag, true);
+    }
+  },
+  {
     name: "normal CORE and HRM status use neutral prompt instead of alert",
     async fn() {
       let currentMenu;

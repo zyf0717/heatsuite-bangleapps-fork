@@ -4,14 +4,26 @@ const fakeStorage = require("../helpers/fake_storage");
 const fakeControlPoint = require("../helpers/fake_controlpoint");
 const protocol = loader.create().require("coretemp.protocol");
 
-function loadHRM(cp, storage) {
+function loadHRM(cp, storage, globals) {
   return loader.create({
     storage,
+    globals,
     overrides: {
       "coretemp.controlpoint": cp,
       "coretemp.store": { log() {}, init() {}, flush() {} }
     }
   }).require("coretemp.hrm");
+}
+
+function immediateTimers(onTimeout) {
+  return {
+    setTimeout(fn, ms) {
+      if (onTimeout) onTimeout(ms);
+      fn();
+      return 1;
+    },
+    clearTimeout() {}
+  };
 }
 
 module.exports = [
@@ -81,7 +93,7 @@ module.exports = [
     }
   },
   {
-    name: "same HRM is idempotent",
+    name: "same HRM is idempotent without replace flag",
     async fn() {
       const storage = fakeStorage.create();
       const cp = fakeControlPoint.create();
@@ -109,16 +121,37 @@ module.exports = [
     name: "replace clears before pairing",
     async fn() {
       const cp = fakeControlPoint.create();
+      let settleMs;
       cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_COUNT, [1]);
       cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_ANT_ENTRY, [0x11, 0x11, 0]);
       cp.enqueueResponse(protocol.OPCODES.HRM_CLEAR_ANT, []);
       cp.enqueueResponse(protocol.OPCODES.HRM_PAIR_ANT, []);
       cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_COUNT, [1]);
       cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_ANT_ENTRY, [0x34, 0x12, 0]);
-      const hrm = loadHRM(cp, fakeStorage.create());
+      const hrm = loadHRM(cp, fakeStorage.create(), immediateTimers(ms => { settleMs = ms; }));
       hrm.init();
       const status = await hrm.pairANT({ antId: 0x1234 }, true);
       assert.strictEqual(status.selected.antId, 0x1234);
+      assert.strictEqual(settleMs, 2000);
+      assert.deepStrictEqual(cp.calls.map(call => call.opcode), [0x04, 0x05, 0x01, 0x02, 0x04, 0x05]);
+    }
+  },
+  {
+    name: "replace clears before pairing the same HRM",
+    async fn() {
+      const cp = fakeControlPoint.create();
+      let settleMs;
+      cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_COUNT, [1]);
+      cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_ANT_ENTRY, [0x34, 0x12, 0]);
+      cp.enqueueResponse(protocol.OPCODES.HRM_CLEAR_ANT, []);
+      cp.enqueueResponse(protocol.OPCODES.HRM_PAIR_ANT, []);
+      cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_COUNT, [1]);
+      cp.enqueueResponse(protocol.OPCODES.HRM_PAIRED_ANT_ENTRY, [0x34, 0x12, 0]);
+      const hrm = loadHRM(cp, fakeStorage.create(), immediateTimers(ms => { settleMs = ms; }));
+      hrm.init();
+      const status = await hrm.pairANT({ antId: 0x1234 }, true);
+      assert.strictEqual(status.selected.antId, 0x1234);
+      assert.strictEqual(settleMs, 2000);
       assert.deepStrictEqual(cp.calls.map(call => call.opcode), [0x04, 0x05, 0x01, 0x02, 0x04, 0x05]);
     }
   },

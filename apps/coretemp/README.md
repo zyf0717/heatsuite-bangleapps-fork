@@ -68,8 +68,8 @@ Available actions:
 
 - `Status`: queries the CORE sensor for currently paired ANT+ HRMs.
 - `Scan ANT+`: starts an ANT+ scan on CORE, waits 5 seconds locally, then
-  reads the found HRM IDs. CORE does not return already paired HRMs in scan
-  results; use `Status`, `Preset HRM`, or `Recent HRMs` for those.
+  reads the found HRM IDs. Scan results may include HRMs already paired on
+  CORE.
 - `Recent HRMs`: shows HRMs previously paired through CoreTemp.
 - `Clear Paired HRM`: clears ANT+ HRMs paired on CORE and verifies the result.
 
@@ -84,9 +84,9 @@ Pairing flow:
 CoreTemp treats pairing as a single-HRM app policy:
 
 - If no HRM is paired, the selected HRM is paired.
-- If the same HRM is already paired, the operation succeeds without replacing
-  it.
-- If a different HRM is paired, CoreTemp asks whether to replace it.
+- If one HRM is already paired, CoreTemp asks whether to replace or re-pair it.
+  Replacement clears CORE's paired HRM, waits 2 seconds, then pairs the
+  selected HRM.
 - If multiple HRMs are paired, clear paired HRMs before pairing another one.
 
 There is no manual ANT ID entry in the on-watch settings UI. The watch pairing
@@ -208,10 +208,11 @@ flowchart TD
   N --> O{paired count}
   O -->|more than 1| X
   O -->|0| P[pairNormalizedEntry]
-  O -->|1 same ANT id| Q[remember selected/recent]
+  O -->|1 same ANT id + replaceExisting=false| Q[remember selected/recent]
   O -->|1 different + replaceExisting=false| X
-  O -->|1 different + replaceExisting=true| R[request HRM_CLEAR_ANT]
-  R --> P
+  O -->|1 paired + replaceExisting=true| R[request HRM_CLEAR_ANT]
+  R --> R2[wait 2s settle]
+  R2 --> P
   Q --> Y
 
   P --> S[request HRM_PAIR_ANT]
@@ -235,9 +236,10 @@ HRM notes:
 
 - `Status`, `Scan ANT+`, `Pair ANT+`, and `Clear Paired HRM` are all verified
   reads or write-then-read flows. The module does not trust an ACK alone.
-- `pairANT` enforces a single-HRM app policy: same ID is idempotent, different
-  single ID requires `replaceExisting`, and multiple paired HRMs are treated as
-  a manual cleanup case.
+- `pairANT` enforces a single-HRM app policy: same ID is idempotent only when
+  `replaceExisting` is false. With `replaceExisting`, the flow clears, waits
+  2 seconds, and pairs the selected HRM. Multiple paired HRMs are treated as a
+  manual cleanup case.
 - Control Point transport errors still come from the BLE layer. If the CORE
   connection drops, the HRM operation fails, `lastError` is recorded, and BLE
   recovery continues through the reconnect lifecycle above.

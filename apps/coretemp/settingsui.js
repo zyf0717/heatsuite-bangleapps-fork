@@ -237,11 +237,12 @@ exports.open = function (back) {
           else openHRMMenu();
         });
       }
-      if (
-        status.pairedSensors.length === 1 &&
-        status.pairedSensors[0].antId !== entry.antId
-      ) {
-        return E.showPrompt("Replace existing\nHRM?").then(function (confirmed) {
+      if (status.pairedSensors.length === 1) {
+        return E.showPrompt(
+          status.pairedSensors[0].antId === entry.antId ?
+            "Re-pair existing\nHRM?" :
+            "Replace existing\nHRM?"
+        ).then(function (confirmed) {
           if (!confirmed) {
             if (parentMenu) E.showMenu(parentMenu);
             else openHRMMenu();

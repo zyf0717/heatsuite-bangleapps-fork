@@ -14,6 +14,7 @@ var SCAN_ENTRY_TIMEOUT_MS = 5000;
 var STATUS_TIMEOUT_MS = 5000;
 var PAIR_TIMEOUT_MS = 10000;
 var CLEAR_TIMEOUT_MS = 10000;
+var REPLACE_CLEAR_SETTLE_MS = 2000;
 
 var hrmState = {
   busy: false,
@@ -237,6 +238,16 @@ function pairNormalizedEntry(entry) {
   });
 }
 
+function replacePairedEntry(entry) {
+  return cp.request(protocol.OPCODES.HRM_CLEAR_ANT, [], CLEAR_TIMEOUT_MS)
+    .then(function () {
+      return waitMs(REPLACE_CLEAR_SETTLE_MS);
+    })
+    .then(function () {
+      return pairNormalizedEntry(entry);
+    });
+}
+
 exports.init = function () {
   readConfig();
 };
@@ -255,7 +266,7 @@ exports.getStatus = function () {
 
 exports.scanANT = function () {
   return runOperation("scan_ant", function () {
-    // CORE omits HRMs that are already paired from scan results.
+    // CORE scan results may include HRMs that are already paired.
     return cp.request(
       protocol.OPCODES.HRM_SCAN_ANT_START,
       [0xFF],
@@ -302,17 +313,14 @@ exports.pairANT = function (entry, replaceExisting) {
         throw new Error("Multiple HRMs are paired on CORE. Clear paired HRMs before pairing one ANT+ sensor.");
       }
       if (entries.length === 1) {
-        if (entries[0].antId === normalized.antId) {
+        if (entries[0].antId === normalized.antId && !replaceExisting) {
           remember(normalized);
           return buildStatus();
         }
         if (!replaceExisting) {
           throw new Error("A different HRM is already paired on CORE");
         }
-        return cp.request(protocol.OPCODES.HRM_CLEAR_ANT, [], CLEAR_TIMEOUT_MS)
-          .then(function () {
-            return pairNormalizedEntry(normalized);
-          });
+        return replacePairedEntry(normalized);
       }
       return pairNormalizedEntry(normalized);
     });
