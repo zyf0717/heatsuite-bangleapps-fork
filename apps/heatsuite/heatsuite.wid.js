@@ -1044,8 +1044,8 @@
 
       return pauseCoreForTask().then(function () {
         recordersWithBLE.forEach(function(item) {
-          modHS.log("Stopping " + item);
           if (activeRecorders.find(r => r.name === item)) {
+            modHS.log("Stopping " + item);
             stopRecorder(item);
           }
         });
@@ -1063,8 +1063,8 @@
       settings = modHS.getSettings();
 
       recordersWithBLE.forEach(function(item) {
-        modHS.log("Starting " + item);
         if (settings.record.includes(item)) {
+          modHS.log("Starting " + item);
           startRecorderByName(item);
         }
       });
