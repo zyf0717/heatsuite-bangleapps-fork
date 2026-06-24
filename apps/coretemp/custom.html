@@ -11,10 +11,6 @@
     <form id="coretempSettings">
       <div class="form-group">
         <label class="form-switch">
-          <input type="checkbox" id="enabled" name="enabled">
-          <i class="form-icon"></i> Enable background CORE connection
-        </label>
-        <label class="form-switch">
           <input type="checkbox" id="widget" name="widget">
           <i class="form-icon"></i> Show widget
         </label>
@@ -40,7 +36,7 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="antId">Default ANT+ HRM ID</label>
+        <label class="form-label" for="antId">Preset ANT+ HRM ID</label>
         <input class="form-input" type="number" id="antId" name="antId" min="1" max="65535" step="1" placeholder="Optional">
         <p class="form-input-hint">ANT+ device ID. Leave blank to remove the stored preset ID only. Does not affect HRMs already paired with CORE.</p>
       </div>
@@ -53,7 +49,6 @@
   <script src="../../core/lib/customize.js"></script>
   <script>
     const DEFAULT_SETTINGS = {
-      enabled: false,
       widget: true,
       customprofileonly: false,
       debugMode: false,
@@ -102,7 +97,6 @@
     }
 
     function fillForm() {
-      document.getElementById("enabled").checked = currentSettings.enabled === true;
       document.getElementById("widget").checked = currentSettings.widget !== false;
       document.getElementById("customprofileonly").checked = currentSettings.customprofileonly === true;
       document.getElementById("debugMode").value = String(normalizeDebugMode(currentSettings));
@@ -113,7 +107,6 @@
     function buildSettings() {
       const debugModeValue = document.getElementById("debugMode").value;
       const settings = Object.assign({}, currentSettings, {
-        enabled: document.getElementById("enabled").checked,
         widget: document.getElementById("widget").checked,
         customprofileonly: document.getElementById("customprofileonly").checked,
         debugMode: debugModeValue === "false" ? false : debugModeValue,
