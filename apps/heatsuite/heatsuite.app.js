@@ -12,52 +12,6 @@ let settings = modHS.getSettings();
 
 let appCache = modHS.getCache();
 
-function safeStringify(value) {
-  try {
-    return JSON.stringify(value);
-  } catch (e) {
-    return String(value);
-  }
-}
-
-function byteToHex(value) {
-  let out = (value & 0xFF).toString(16);
-  return out.length < 2 ? "0" + out : out;
-}
-
-function bufferToHex(buffer) {
-  if (!buffer) return "";
-  let arr = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  let bytes = [];
-  for (let i = 0; i < arr.length; i++) bytes.push(byteToHex(arr[i]));
-  return bytes.join(" ");
-}
-
-function serviceDataToHex(serviceData) {
-  if (!serviceData) return "{}";
-  let out = {};
-  Object.keys(serviceData).forEach(k => {
-    out[k] = bufferToHex(serviceData[k]);
-  });
-  return safeStringify(out);
-}
-
-function log() {
-  let parts = [];
-  for (let i = 0; i < arguments.length; i++) parts.push(String(arguments[i]));
-  modHS.log(parts.join(" "));
-}
-
-function logScanDevice(d) {
-  log("[Scan] device",
-    "id=" + d.id,
-    "name=" + (d.name || ""),
-    "rssi=" + d.rssi,
-    "services=" + safeStringify(d.services || []),
-    d.data ? "payload=" + bufferToHex(d.data) : "",
-    d.serviceData ? "serviceData=" + serviceDataToHex(d.serviceData) : "");
-}
-
 function stopBLEDevices() {
   if (global.WIDGETS && WIDGETS["heatsuite"] && WIDGETS["heatsuite"].stopBLEDevices) {
     return Promise.resolve(WIDGETS["heatsuite"].stopBLEDevices());
@@ -65,15 +19,14 @@ function stopBLEDevices() {
   return Promise.resolve();
 }
 
-function loadTaskApp(app) {
+function loadBPTaskApp() {
   NRF.setScan();
-
   stopBLEDevices().then(function () {
     NRF.setScan();
-    Bangle.load(app);
+    Bangle.load('heatsuite.bp.js');
   }).catch(function (e) {
-    modHS.log("Failed to stop BLE before task: " + e);
-    Bangle.load(app);
+    modHS.log("Failed to stop BLE before BP task: " + e);
+    Bangle.load('heatsuite.bp.js');
   });
 }
 
@@ -89,17 +42,33 @@ function findBtDevices() {
   NRF.setScan(); //clear any scans running!
   NRF.findDevices(function (devices) {
     let found = false;
+    function foundDevice(label, appFile) {
+      found = true;
+      if (layout && layout.msg) {
+        layout.msg.label = label + " Found";
+        layout.render();
+      }
+      if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
+      if (TaskScreenTimeout) clearTimeout(TaskScreenTimeout);
+      NRF.setScan();
+      WIDGETS['heatsuite'].stopBLEDevices();
+      Bangle.load(appFile);
+      return true;
+    }
     if (devices.length !== 0) {
       devices.some((d) => {
-        logScanDevice(d);
+        modHS.log("Found device", d);
         let services = d.services;
+        modHS.log("Services: ", services);
         if (services !== undefined && services.includes('1810') && d.id === settings.bt_bloodPressure_id) {
           //Blood Pressure
           found = true;
-          layout.msg.label = "BP Found";
-          layout.render();
+          if (layout && layout.msg) {
+            layout.msg.label = "BP Found";
+            layout.render();
+          }
           if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
-          loadTaskApp('heatsuite.bp.js');
+          loadBPTaskApp();
           return true;
         } else if (services !== undefined && (services.includes('181b') || services.includes('181d')) && studyTasks.some(task => task.id === "bodyMass")) {
           if (services.includes('181b')) {
@@ -136,20 +105,10 @@ function findBtDevices() {
             }
           }
             //Mass found
-            found = true;
-            layout.msg.label = "Scale Found";
-            layout.render();
-            if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
-            loadTaskApp('heatsuite.mass.js');
-            return true;
+            return foundDevice("Scale", 'heatsuite.mass.js');
         } else if (services !== undefined && services.includes('1809') && d.id === settings.bt_coreTemperature_id) {
           //Core Temperature
-          found = true;
-          layout.msg.label = "Temp Found";
-          layout.render();
-          if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
-          loadTaskApp('heatsuite.bletemp.js');
-          return true;
+          return foundDevice("Temp", 'heatsuite.bletemp.js');
         }
       });
     }
@@ -165,18 +124,16 @@ function findBtDevices() {
 
 function taskButtonInterpretter(string) {
   //turn off FindDeviceHandler whenever we navigate off task screen
-  let command = 'if (NRFFindDeviceTimeout){clearTimeout(NRFFindDeviceTimeout);}' + string;
-  return eval(command);
+  if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
+  return eval(string);
 }
 
 function queueTaskScreenTimeout() {
   if (TaskScreenTimeout) clearTimeout(TaskScreenTimeout);
-  if (TaskScreenTimeout === undefined) {
-    TaskScreenTimeout = setTimeout(function () {
-      if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
-      Bangle.load();
-    }, 180000);
-  }
+  TaskScreenTimeout = setTimeout(function () {
+    if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
+    Bangle.load();
+  }, 180000);
 }
 
 function draw() {
@@ -184,7 +141,7 @@ function draw() {
   g.clear();
   g.reset();
   if (studyTasks.length === 0) {
-    if(require("Storage").list().includes("heatsuite.survey.json")){ //likely just using for EMA survey
+    if(require("Storage").read("heatsuite.survey.json") !== undefined){ //likely just using for EMA survey
       return Bangle.load('heatsuite.survey.js'); //go right to survey!
     }
     modHS.log('No Study Tasks loaded...');
@@ -255,28 +212,16 @@ function draw() {
   if (row.c.length > 0) {
     layoutOut.c.push(row);
   }
-  //Final
+  //Final 
   if(btRequired) layoutOut.c.push({ type: "txt", font: "6x8:2", label: "Searching...", id: "msg", fillx: 1 });
-  let options = {
+  let options = { 
     lazy: true,
     btns:[{label:"Exit", cb: l=>Bangle.showClock() }]
   };
-
+  
   layout = new Layout(layoutOut, options);
   layout.render();
-
-  if (btRequired) {
-    log("[BLE preflight] stopping BLE before task scan");
-
-    stopBLEDevices().then(function () {
-      log("[BLE preflight] complete, starting scan loop");
-      queueNRFFindDeviceTimeout();
-    }).catch(function (e) {
-      modHS.log("[BLE preflight] failed: " + e);
-      queueNRFFindDeviceTimeout();
-    });
-  }
-
+  if(btRequired) queueNRFFindDeviceTimeout();
   queueTaskScreenTimeout();
 }
 

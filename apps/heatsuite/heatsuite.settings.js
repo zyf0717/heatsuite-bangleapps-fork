@@ -3,7 +3,6 @@
     var modHS = require('HSModule');
     var settingsJSON = "heatsuite.settings.json";
     var studyTasksJSON = "heatsuite.tasks.json";
-    var defaultSettings = modHS.getDefaultSettings ? modHS.getDefaultSettings() : {};
     var BP_SERVICE_UUID = "1810";
     var BP_DATE_TIME_UUID = "2A08";
 
@@ -111,12 +110,10 @@
 
     function readSettings() {
         var out = Object.assign(
-            {},
-            defaultSettings,
+            require('Storage').readJSON("heatsuite.default.json", true) || {},
             require('Storage').readJSON(settingsJSON, true) || {}
         );
         out.StudyTasks = require('Storage').readJSON(studyTasksJSON, true) || [];
-        if (!Array.isArray(out.record)) out.record = [];
         if (!Array.isArray(out.StudyTasks)) out.StudyTasks = [];
         return out;
     }
@@ -168,8 +165,8 @@
         }).then(function () {
             writeSettings("bt_bloodPressure_id", id);
             // Store the name for displaying later. Will connect by ID
-            if (name || (device && device.device && device.device.name)) {
-                writeSettings("bt_bloodPressure_name", name || device.device.name);
+            if (name || device.name || (device.device && device.device.name)) {
+                writeSettings("bt_bloodPressure_name", name || device.name || device.device.name);
             }
             E.showPrompt("Paired!", { title: "BP Device", buttons: { "OK": true } }).then(function () { startBLEDevices(); E.showMenu(deviceSettings()) });
             log("[BP Pair] Saved device id", id, name || "");
@@ -180,21 +177,21 @@
         });
     }
     function PairTcore(id) {
-        E.showMessage(`Pairing with\n${id}`, "Bluetooth");
+        E.showMessage(`Pairing /n ${id}`, "Bluetooth");
         var gatt;
         NRF.connect(id).then(function (g) {
             gatt = g;
-            log("[CORE Pair] Connected", id);
+            console.log("connected!!!");
             //  return gatt.startBonding();
             //}).then(function() {
-            log("[CORE Pair] Security", safeStringify(gatt.getSecurityStatus ? gatt.getSecurityStatus() : {}));
+            console.log("bonded", gatt.getSecurityStatus());
             writeSettings("bt_coreTemperature_id", id);
-            E.showAlert("Paired!").then(function () { startBLEDevices(); E.showMenu(deviceSettings()) });
+            E.showAlert("Paired!").then(function () { WIDGETS['heatsuite'].startBLEDevices(); E.showMenu(deviceSettings()) });
             log("Device ID paired, Done!");
             return gatt.disconnect();
         }).catch(function (e) {
             log("ERROR: " + e);
-            E.showAlert("error! " + e).then(function () { startBLEDevices(); E.showMenu(deviceSettings()) });
+            E.showAlert("error! " + e).then(function () { WIDGETS['heatsuite'].startBLEDevices();E.showMenu(deviceSettings()) });
         });
     }
 
@@ -271,7 +268,7 @@
             '': { 'title': 'Main' },
             '< Back': back
         };
-
+        
         menu['Recorders'] = function () {E.showMenu(recordMenu()) };
         menu['Devices'] = function () { E.showMenu(deviceSettings()) };
         menu['GPS'] = function () { E.showMenu(gpsSettings()) };
@@ -341,7 +338,7 @@
         var menu = {
             '': { 'title': 'Debug' },
             '< Back': function () { E.showMenu(mainMenuSettings()); }
-        };
+        }; 
         menu['Console'] = {
             value: settings.DEBUG || false,
             onchange: v => {
@@ -362,7 +359,7 @@
         var menu = {
             '': { 'title': 'High Acc' },
             '< Back': function () { E.showMenu(mainMenuSettings()); }
-        };
+        }; 
         menu['Interval'] = {
             value: settings.AccLogInt || 5,
             min: 1, max: 60,
@@ -372,11 +369,11 @@
             }
         };
         menu['Rec/File'] = {
-            value: settings.AccelBinMaxRecords || 6000,
+            value: settings.BinMaxRecords || 6000,
             min: 100, max: 12000, step: 100,
             onchange: v => {
-                settings.AccelBinMaxRecords = v;
-                writeSettings("AccelBinMaxRecords", v);
+                settings.BinMaxRecords = v;
+                writeSettings("BinMaxRecords", v);
             }
         };
         return menu;
@@ -405,7 +402,7 @@
             value: settings.GPSInterval || 10,
             min: 0, max: 180,
             onchange: v => {
-                settings.GPSinterval = v;
+                settings.GPSInterval = v;
                 writeSettings("GPSInterval", v);
             }
         };
@@ -489,6 +486,6 @@
             startScan();
         });
     }
-
+    
     E.showMenu(mainMenuSettings());
 })
