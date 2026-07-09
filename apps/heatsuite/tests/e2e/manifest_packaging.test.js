@@ -16,19 +16,19 @@ module.exports = [
     }
   },
   {
-    name: "metadata packages starter data for fresh installs",
+    name: "metadata packages default settings for fresh installs",
     fn() {
       const root = path.resolve(__dirname, "../..");
       const metadata = JSON.parse(fs.readFileSync(path.join(root, "metadata.json"), "utf8"));
       const entries = metadata.storage.concat(metadata.data || []);
       const byName = Object.fromEntries(entries.map(entry => [entry.name, entry]));
 
-      assert.strictEqual(byName["heatsuite.settings.json"].url, "heatsuite.settings.json");
-      assert.strictEqual(byName["heatsuite.tasks.json"].url, "heatsuite.tasks.json");
-      assert.strictEqual(byName["heatsuite.survey.json"].url, "heatsuite.survey.json");
-      assert.strictEqual(byName["heatsuite.default.json"], undefined);
+      assert.strictEqual(byName["heatsuite.default.json"].url, "default.json");
+      assert.ok(byName["heatsuite.settings.json"]);
+      assert.ok(byName["heatsuite.tasks.json"]);
+      assert.ok(byName["heatsuite.survey.json"]);
 
-      const settings = JSON.parse(fs.readFileSync(path.join(root, "heatsuite.settings.json"), "utf8"));
+      const settings = JSON.parse(fs.readFileSync(path.join(root, "default.json"), "utf8"));
       assert.ok(Array.isArray(settings.record));
       assert.ok(settings.record.includes("bat"));
       assert.strictEqual(settings.record.includes("CORESensor"), true);
@@ -38,14 +38,17 @@ module.exports = [
     name: "customizer defaults match packaged recorder defaults",
     fn() {
       const root = path.resolve(__dirname, "../..");
-      const settings = JSON.parse(fs.readFileSync(path.join(root, "heatsuite.settings.json"), "utf8"));
+      const settings = JSON.parse(fs.readFileSync(path.join(root, "default.json"), "utf8"));
       const custom = fs.readFileSync(path.join(root, "custom.html"), "utf8");
-      const match = custom.match(/let heatsuite__settings_defaultSchema = (\{[\s\S]*?\n {4}\});/);
-      assert.ok(match, "customizer default schema not found");
-      const customSettings = Function("return " + match[1])();
+      const recordDefaults = [];
+      const recordInput = /<input[^>]+name="record"[^>]+value="([^"]+)"[^>]*>/g;
+      let match;
+      while ((match = recordInput.exec(custom))) {
+        if (/\bchecked\b/.test(match[0])) recordDefaults.push(match[1]);
+      }
 
-      assert.deepStrictEqual(customSettings.record, settings.record);
-      assert.strictEqual(customSettings.record.includes("CORESensor"), true);
+      assert.deepStrictEqual(recordDefaults, settings.record);
+      assert.strictEqual(recordDefaults.includes("CORESensor"), true);
     }
   }
 ];

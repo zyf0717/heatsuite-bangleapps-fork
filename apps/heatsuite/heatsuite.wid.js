@@ -9,6 +9,22 @@
   var activeRecorders = [];
   var recordersWithBLE = ['bthrm','CORESensor'];
   var CORE_TASK_OWNER = "heatsuite.task";
+  var dataLog = [];
+  var lastGPSFix = 0;
+  var gpsLog = [];
+  var connectionLock = false;
+  var processQueue = [];
+  var processQueueTimeout = null;
+  let nextInitMs = 0;
+  let BTHRM_ConnectCheck = null;
+  let swipeHandler = null;
+  //high Accelerometry data
+  var perSecAccHandler = null;
+  var highAccTimeout = null;
+  var highAccWriteTimeout = null;
+  //Fall Detection
+  var fallTime = 0;
+  var fallDetected = false;
 
   function wait(ms) {
     return new Promise(function(resolve) {
@@ -16,8 +32,23 @@
     });
   }
 
+  function ensureCoreTempRuntime() {
+    if (Bangle.setCORESensorPower) return true;
+    try {
+      require("CORESensor").enable();
+    } catch (e) {
+      modHS.log("CORESensor runtime enable failed: " + e);
+    }
+    if (!Bangle.setCORESensorPower) {
+      modHS.log("CORESensor runtime unavailable");
+      return false;
+    }
+    return true;
+  }
+
   function pauseCoreForTask() {
     try {
+      if (!Bangle.CORESensorPause && !ensureCoreTempRuntime()) return Promise.resolve();
       if (Bangle.CORESensorPause) {
         modHS.log("Pausing CORESensor for HeatSuite task BLE");
         return Bangle.CORESensorPause(CORE_TASK_OWNER);
@@ -30,6 +61,7 @@
 
   function resumeCoreAfterTask() {
     try {
+      if (!Bangle.CORESensorResume && !ensureCoreTempRuntime()) return Promise.resolve();
       if (Bangle.CORESensorResume) {
         modHS.log("Resuming CORESensor after HeatSuite task BLE");
         return Bangle.CORESensorResume(CORE_TASK_OWNER);
@@ -45,38 +77,18 @@
       if (!Bangle.setBTHRMPower) return wait(1000);
 
       modHS.log("Hard stopping BTHRM");
-
       if (Bangle._PWR && Bangle._PWR.BTHRM && Bangle._PWR.BTHRM.length) {
         Bangle._PWR.BTHRM.slice().forEach(function(owner) {
           modHS.log("Releasing BTHRM owner " + owner);
           Bangle.setBTHRMPower(0, owner);
         });
       }
-
       Bangle.setBTHRMPower(0, appName);
     } catch (e) {
       modHS.log("Hard stop BTHRM failed: " + e);
     }
-
     return wait(1500);
   }
-
-  var dataLog = [];
-  var lastGPSFix = 0;
-  var gpsLog = [];
-  var connectionLock = false;
-  var processQueue = [];
-  var processQueueTimeout = null;
-  let initHandlerTimeout = null;
-  let BTHRM_ConnectCheck = null;
-  //high Accelerometry data
-  var perSecAccHandler = null;
-  var highAccTimeout = null;
-  var highAccWriteTimeout = null;
-  //Fall Detection
-  var fallTime = 0;
-  var fallDetected = false;
-
   Bangle.setOptions({
     "hrmSportMode": -1,
   });
@@ -112,10 +124,19 @@
     }
     if (!connectionLock && processQueue.length > 0) {
       const task = processQueue.shift();
-      task(() => {
+      let done = false;
+      const next = () => {
+        if (done) return;
+        done = true;
         modHS.log("[ProcessQueue] Processing queued Task");
         processNextInQueue();
-      });
+      };
+      try {
+        task(next);
+      } catch (e) {
+        modHS.log("[ProcessQueue][ERROR] " + e);
+        next();
+      }
     } else {
       if (!processQueueTimeout) {
         processQueueTimeout = setTimeout(processNextInQueue, 1000);
@@ -307,32 +328,23 @@
         var hsi = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
         var core_bat = null;
         var unit = null;
-        var OWNER = "heatsuite.recorder.CORESensor";
-
+        var owner = "heatsuite.recorder.CORESensor";
         function onCORE(h) {
           core = newValueHandler(core, h.core);
           skin = newValueHandler(skin, h.skin);
-          if (h.hr > 0) core_hr = newValueHandler(core_hr, h.hr);
+          if (h.hr > 0) {
+            core_hr = newValueHandler(core_hr, h.hr);
+          }
           heatflux = newValueHandler(heatflux, h.heatflux);
           hsi = newValueHandler(hsi, h.hsi);
           core_bat = h.battery;
           unit = h.unit;
         }
-
         return {
           name: "CORESensor",
-          fields: ["core", "skin", "unit", "core_hr", "hf", "hsi", "core_bat"],
+          fields: ["core", "skin", "unit", "core_hr", "hf","hsi", "core_bat"],
           getValues: () => {
-            const result = [
-              core.avg === null ? null : core.avg.toFixed(2),
-              skin.avg === null ? null : skin.avg.toFixed(2),
-              unit,
-              core_hr.avg === null ? null : core_hr.avg.toFixed(0),
-              heatflux.avg === null ? null : heatflux.avg.toFixed(2),
-              hsi.avg === null ? null : hsi.avg.toFixed(1),
-              core_bat
-            ];
-
+            const result = [core.avg === null ? null : core.avg.toFixed(2), skin.avg === null ? null : skin.avg.toFixed(2), unit, core_hr.avg === null ? null : core_hr.avg.toFixed(0), heatflux.avg === null ? null : heatflux.avg.toFixed(2),hsi.avg === null ? null : hsi.avg.toFixed(1), core_bat];
             core = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
             skin = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
             core_hr = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
@@ -340,25 +352,18 @@
             hsi = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
             core_bat = null;
             unit = null;
-
             return result;
           },
           start: () => {
-            try { require("CORESensor").enable(); } catch (e) {}
-            if (Bangle.setCORESensorPower) {
-              Bangle.setCORESensorPower(1, OWNER);
-            }
-            Bangle.on("CORESensor", onCORE);
-            modHS.log("CORESensor recorder started and requested CORE power");
+            ensureCoreTempRuntime();
+            Bangle.on('CORESensor', onCORE);
+            if (Bangle.setCORESensorPower) Bangle.setCORESensorPower(1, owner);
           },
           stop: () => {
-            Bangle.removeListener("CORESensor", onCORE);
-            if (Bangle.setCORESensorPower) {
-              Bangle.setCORESensorPower(0, OWNER);
-            }
-            modHS.log("CORESensor recorder stopped and released CORE power");
+            Bangle.removeListener('CORESensor', onCORE);
+            if (Bangle.setCORESensorPower) Bangle.setCORESensorPower(0, owner);
           }
-        };
+        }
       },
       bat: function () {
         return {
@@ -403,18 +408,28 @@
       },
       acc: function () {
         var accMagArray = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
+        var enmoArray = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
         function accelHandler(accel) {
           // magnitude is computed as: sqrt(x*x + y*y + z*z)
-          // to compute Elucidean Norm Minus One, simply run: mag - 1
-          // (https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0061691)
+          // ENMO is Euclidean Norm Minus One, clipped at zero.
+          // (https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0061691) 
           accMagArray = newValueHandler(accMagArray, accel.mag);
+          enmoArray = newValueHandler(enmoArray, Math.max(0, accel.mag - 1));
         }
         return {
           name: "acc",
-          fields: ["acc_min", "acc_max", "acc_avg", "acc_sum"],
+          fields: ["acc_min", "acc_max", "acc_avg", "acc_sum", "enmo_sum", "enmo_avg"],
           getValues: () => {
-            var r = [accMagArray.min === null ? null : accMagArray.min.toFixed(4), accMagArray.max === null ? null : accMagArray.max.toFixed(4), accMagArray.avg === null ? null : accMagArray.avg.toFixed(4), accMagArray.sum === null ? null : accMagArray.sum.toFixed(4)];
+            var r = [
+              accMagArray.min === null ? null : accMagArray.min.toFixed(4),
+              accMagArray.max === null ? null : accMagArray.max.toFixed(4),
+              accMagArray.avg === null ? null : accMagArray.avg.toFixed(4),
+              accMagArray.sum === null ? null : accMagArray.sum.toFixed(4),
+              enmoArray.sum === null ? null : enmoArray.sum.toFixed(4),
+              enmoArray.avg === null ? null : enmoArray.avg.toFixed(4)
+            ];
             accMagArray = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
+            enmoArray = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
             return r;
           },
           start: () => {
@@ -443,9 +458,9 @@
           fields: ["baro_temp", "baro_press", "baro_alt"],
           getValues: () => {
             var r = [temp.avg === null ? null : temp.avg.toFixed(2), press.avg === null ? null : press.avg.toFixed(2), alt.avg === null ? null : alt.avg.toFixed(2)];
-            var temp = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
-            var press = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
-            var alt = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
+            temp = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
+            press = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
+            alt = { "count": null, "avg": null, "min": null, "max": null, "sum": null, "last": null };
             return r;
           },
           start: () => {
@@ -472,12 +487,21 @@
     arr.max = (value > arr.max) ? value : arr.max;
     return arr;
   }
-  //increased accelerometer data storage for higher resolution activity tracking
+  //increased accelerometer data storage for higher resolution activity tracking 
   function perSecAcc(status) {
+    if (perSecAccHandler) {
+      Bangle.removeListener('accel', perSecAccHandler);
+      perSecAccHandler = null;
+    }
+    if (highAccTimeout) {
+      clearTimeout(highAccTimeout);
+      highAccTimeout = null;
+    }
+    if (highAccWriteTimeout) {
+      clearTimeout(highAccWriteTimeout);
+      highAccWriteTimeout = null;
+    }
     if(!status){
-      if (perSecAccHandler) Bangle.removeListener('accel', perSecAccHandler);
-      if (highAccTimeout) clearTimeout(highAccTimeout);
-      if (highAccWriteTimeout) clearTimeout(highAccWriteTimeout);
       return;
     }
     let rawAccLogInt = (settings.AccLogInt ? settings.AccLogInt * 1000 : 1000);
@@ -563,7 +587,7 @@
       var currentOffset = HDR_LEN + startIndex * RECORD_SIZE;
       var toWrite = combined;
       var safetyIters = 0, SAFETY_MAX = 64;
-      var maxRecords = modHS.getSettings().BinMaxRecords|0;
+      var maxRecords = modHS.getSettings().BinMaxRecords|0; 
       if (maxRecords <= 0) maxRecords = 6000;
       var capacity = HDR_LEN + maxRecords * RECORD_SIZE;
       while (toWrite.length > 0) {
@@ -655,7 +679,7 @@
     highAccTimeout = timeoutAligned(accLogInt, tempAccLog);
     highAccWriteTimeout = timeoutAligned(30000, writeHSAccelSetTimeout);
   }
-
+  
   function updateBLEAdvert(data) {
     //var unix = parseInt((new Date().getTime() / 1000).toFixed(0));
     var batt = null,
@@ -678,12 +702,12 @@
       temperature = (rawTemp != null) ? Math.round(rawTemp * 100) : null;
       heartRate = safeGet('hr', data, headers);
       hr_loc = 1;
-      if (headers.includes('bt_hrm')) {
+      if (headers.includes('bt_bpm')) {
         hr_loc = 2;
-        heartRate = safeGet('bt_hrm', data, headers);
+        heartRate = safeGet('bt_bpm', data, headers);
       }
-      rawMovement = safeGet('acc_sum', data, headers);
-      movement = (rawMovement != null) ? Math.round(rawMovement * 10000) : null;
+      rawMovement = safeGet('enmo_avg', data, headers);
+      movement = (rawMovement != null) ? Math.round(rawMovement * 1000) : null;
     }
     var studyid = settings.studyID || "####";
     if (studyid.length > 4) {
@@ -726,7 +750,16 @@
 
   function storeTempLog(unix) {
     var fields = [unix, ((new Date()).getTimezoneOffset() * -60)];
-    activeRecorders.forEach(recorder => fields.push.apply(fields, recorder.getValues()));
+    activeRecorders.forEach(recorder => {
+      try {
+        fields.push.apply(fields, recorder.getValues());
+      } catch (e) {
+        modHS.log("[Recorder][ERROR] " + recorder.name + ": " + e);
+        if (recorder.fields && recorder.fields.length) {
+          recorder.fields.forEach(() => fields.push(null));
+        }
+      }
+    });
     dataLog.push(fields);
     lastBLEAdvert = fields;
     updateBLEAdvert(lastBLEAdvert);
@@ -889,25 +922,36 @@
       }
     }, unix);
   }
-  function initHandler() {
-    function callback() {
-      init(); initHandler();
+  function nextAlignedMinuteMs() {
+    var now = Date.now();
+    return now + (60000 - (now % 60000));
+  }
+  function runScheduledInit() {
+    var now = Date.now();
+    if (nextInitMs && now < nextInitMs) return;
+    try {
+      init();
+    } catch (e) {
+      modHS.log("[INIT][ERROR] " + e);
     }
-    initHandlerTimeout = timeoutAligned(60000, callback);
+    nextInitMs = nextAlignedMinuteMs();
   }
 
   function startRecorder() {
+    stopRecorder(null);
+    Bangle.removeListener('accel', fallDetectFunc);
+    if (swipeHandler) {
+      Bangle.removeListener('swipe', swipeHandler);
+      swipeHandler = null;
+    }
+    perSecAcc(false);
     settings = modHS.getSettings();
     if (!Array.isArray(settings.record)) settings.record = [];
     if (!Array.isArray(settings.StudyTasks)) settings.StudyTasks = [];
-    if (initHandlerTimeout) clearTimeout(initHandlerTimeout);
-    if (BTHRM_ConnectCheck) clearInterval(BTHRM_ConnectCheck);
-    activeRecorders.forEach(function (r) {
-      if (r && typeof r.stop === "function") {
-        try { r.stop(); } catch (e) { modHS.log("Recorder stop failed: " + e); }
-      }
-    });
-    activeRecorders = [];
+    if (BTHRM_ConnectCheck) {
+      clearInterval(BTHRM_ConnectCheck);
+      BTHRM_ConnectCheck = null;
+    }
     recorders = getRecorders();
     settings.record.forEach(r => {
       var recorder = recorders[r];
@@ -920,8 +964,6 @@
     });
     if (settings.hasOwnProperty('fallDetect') && settings.fallDetect) {
       Bangle.on('accel', fallDetectFunc);
-    } else {
-      Bangle.removeListener('accel', fallDetectFunc);
     }
     //BTHRM Additions
     if (settings.record.includes('bthrm') && Bangle.hasOwnProperty("isBTHRMConnected")) {
@@ -934,25 +976,24 @@
       }, 10000); //runs every 10 seconds
     }
     updateBLEAdvert(lastBLEAdvert);
-    initHandler();
-    if (settings.highAcc !== undefined && settings.highAcc) {
-      perSecAcc(settings.highAcc);
-    }
+    nextInitMs = nextAlignedMinuteMs();
+    perSecAcc(settings.highAcc !== undefined && settings.highAcc);
     if(settings.swipeOpen !== undefined && settings.swipeOpen){
-      Bangle.on('swipe', function(dir) {
+      swipeHandler = function(dir) {
         if (dir === 1) { // 1 = right swipe
           Bangle.buzz();
           require("widget_utils").hide();
           Bangle.load('heatsuite.app.js');
         }
-      });
+      };
+      Bangle.on('swipe', swipeHandler);
     }
   }
   //added function for stopping a speciifc recorder as needed
   function stopRecorder(name) {
     if (name === null) {
       activeRecorders.forEach(r => {
-          r.stop();
+          if (r && typeof r.stop === "function") r.stop();
           modHS.log(`Stopped ${r}`);
       });
       activeRecorders = []; // Clear the list
@@ -989,10 +1030,12 @@
   resumeCoreAfterTask().then(function () {
     startRecorder();
   });
+  runScheduledInit();
 
   gpsHandler();
 
   function writeSetTimeout() {
+      runScheduledInit();
       if (dataLog.length > 0) {
         queueProcess((next, unix) => {
           writeLog();
@@ -1014,21 +1057,17 @@
 
   //widget stuff
   var iconWidth = 44;
-  var iconHeight = 24;
   function draw() {
-    var x = this.x, y = this.y;
     g.reset();
-    g.setClipRect(x, y, x + iconWidth - 1, y + iconHeight - 1);
     g.setColor(cache.taskQueue === undefined ? "#fff" : cache.taskQueue.length > 0 ? "#f00" : "#0f0");
     g.setFontAlign(0, 0);
-    g.fillRect({ x: x, y: y, w: iconWidth, h: iconHeight, r: 8 });
+    g.fillRect({ x: this.x, y: this.y, w: this.x + iconWidth - 1, h: this.y + 23, r: 8 });
     g.setColor(-1);
     g.setFont("Vector", 12);
-    g.drawImage(atob("FBfCAP//AADk+kPKAAAoAAAAAKoAAAAAKAAAAFQoFQAAVTxVAFQVVVQVRABVABFVEBQEVQBUABUAAFUAVQCoFVVUKogAVQAiqBVVVCoAVQBVAABUABUAVRAUBFVEAFUAEVQVVVQVAFU8VQAAVCgVAAAAKAAAAACqAAAAACgAAA=="), x + 1, y + 1);
-    g.setColor((Bangle.hasOwnProperty("isBTHRMConnected") && Bangle.isBTHRMConnected()) ? "#00F" : "#888");
-    g.drawImage(atob("EhCCAAKoAqgCqqiqqCqqqqqqqqqqqqqqqqqqqqqqqqqqqqqiqqqqqAqqqqoAKqqqgACqqqAAAqqoAAAKqgAAACqAAAAAoAAAAAoAAA=="), x + 22, y + 3);
-    g.setClipRect(0, 0, g.getWidth() - 1, g.getHeight() - 1);
-
+    g.drawImage(atob("FBfCAP//AADk+kPKAAAoAAAAAKoAAAAAKAAAAFQoFQAAVTxVAFQVVVQVRABVABFVEBQEVQBUABUAAFUAVQCoFVVUKogAVQAiqBVVVCoAVQBVAABUABUAVRAUBFVEAFUAEVQVVVQVAFU8VQAAVCgVAAAAKAAAAACqAAAAACgAAA=="), this.x + 1, this.y + 1);
+    g.setColor((Bangle.hasOwnProperty("isBTHRMConnected") && Bangle.isBTHRMConnected()) ? "#00F" : "#0f0");
+    g.drawImage(atob("EhCCAAKoAqgCqqiqqCqqqqqqqqqqqqqqqqqqqqqqqqqqqqqiqqqqqAqqqqoAKqqqgACqqqAAAqqoAAAKqgAAACqAAAAAoAAAAAoAAA=="), this.x + 22, this.y + 3);
+  
   }
   WIDGETS.heatsuite = {
     area: 'tr',
@@ -1038,45 +1077,44 @@
       startRecorder();
       WIDGETS["heatsuite"].draw();
     },
-
     stopBLEDevices: function() {
       settings = modHS.getSettings();
-
       return pauseCoreForTask().then(function () {
         recordersWithBLE.forEach(function(item) {
+          modHS.log("Stopping " + item);
           if (activeRecorders.find(r => r.name === item)) {
-            modHS.log("Stopping " + item);
             stopRecorder(item);
           }
         });
-
-        NRF.setScan(); // clear active scans
-
+        NRF.setScan();
         return hardStopBTHRM();
       }).then(function () {
-        NRF.setScan(); // clear again after BLE settles
+        NRF.setScan();
         return wait(500);
       });
     },
-
     startBLEDevices: function() {
       settings = modHS.getSettings();
-
       recordersWithBLE.forEach(function(item) {
+        modHS.log("Starting " + item);
         if (settings.record.includes(item)) {
-          modHS.log("Starting " + item);
           startRecorderByName(item);
         }
       });
-
       return resumeCoreAfterTask();
     }
   };
 
+  //Diagnosing BLUETOOTH Connection Issues
+  //for managing memory issues - keeping code here for testing purposes in the future
+  if (NRF.getSecurityStatus().connected) { //if widget starts while a bluetooth connection exits, force connection flag - but this is 
+    //connectionLock = true;
+  }
   NRF.on('error', function (msg) {
     modHS.log("[NRF][ERROR] " + msg);
   });
   NRF.on('connect', function (addr) {
+    //connectionLock = true;
     modHS.log("[NRF][CONNECTED] " + JSON.stringify(addr));
   });
   NRF.on('disconnect', function (reason) {

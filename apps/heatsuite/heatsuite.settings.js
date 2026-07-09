@@ -92,6 +92,15 @@
         if (global.WIDGETS && WIDGETS["heatsuite"]) WIDGETS["heatsuite"].changed(); //redraw widget on settings update if open
     }
 
+    function writeSettingsBatch(values) {
+        var s = require('Storage').readJSON(settingsJSON, true) || {};
+        Object.keys(values).forEach(function (key) {
+            s[key] = values[key];
+        });
+        require('Storage').writeJSON(settingsJSON, s);
+        settings = readSettings();
+    }
+
     function getWidget() {
         return global.WIDGETS && WIDGETS["heatsuite"];
     }
@@ -108,6 +117,18 @@
         return Promise.resolve();
     }
 
+    function disconnectDevice(device) {
+        if (!device || device.connected === false || !device.disconnect) return Promise.resolve();
+        try {
+            return Promise.resolve(device.disconnect()).catch(function (e) {
+                log("[BLE] Disconnect failed", e);
+            });
+        } catch (e) {
+            log("[BLE] Disconnect failed", e);
+            return Promise.resolve();
+        }
+    }
+
     function readSettings() {
         var out = Object.assign(
             require('Storage').readJSON("heatsuite.default.json", true) || {},
@@ -122,6 +143,7 @@
     /*---- PAIRING FUNCTIONS FOR DEVICES ----*/
     function BPPair(id, name) {
         var device;
+        var pairedName;
         function attachDisconnectLog() {
             if (!device || !device.device || device.device._hsBPDisconnectLog) return;
             device.device._hsBPDisconnectLog = true;
@@ -141,6 +163,27 @@
                 log("[BP Pair] Connected", id);
                 logSecurityStatus("[BP Pair] Security after connect", device);
                 return new Promise(resolve => setTimeout(resolve, 2000));
+            });
+        }
+        function savePairing() {
+            var values = { "bt_bloodPressure_id": id };
+            pairedName = name || device.name || (device.device && device.device.name);
+            if (pairedName) values.bt_bloodPressure_name = pairedName;
+            writeSettingsBatch(values);
+            log("[BP Pair] Saved device id", id, pairedName || "");
+        }
+        function restoreBLEAndShowMenu(message, title, isError) {
+            return startBLEDevices().catch(function (e) {
+                log("[BLE] Restore failed", e);
+                if (!isError) {
+                    message = message + "\nBLE restore failed: " + e;
+                    title = title || "BP Device";
+                }
+            }).then(function () {
+                if (isError) {
+                    return E.showAlert(message, title).then(function () { E.showMenu(deviceSettings()); });
+                }
+                return E.showPrompt(message, { title: title, buttons: { "OK": true } }).then(function () { E.showMenu(deviceSettings()); });
             });
         }
         E.showMessage(`Pairing with\n${id}`, "Pair BP");
@@ -163,17 +206,15 @@
         }).then(function () {
             return trySyncBPDeviceTime(device);
         }).then(function () {
-            writeSettings("bt_bloodPressure_id", id);
-            // Store the name for displaying later. Will connect by ID
-            if (name || device.name || (device.device && device.device.name)) {
-                writeSettings("bt_bloodPressure_name", name || device.name || device.device.name);
-            }
-            E.showPrompt("Paired!", { title: "BP Device", buttons: { "OK": true } }).then(function () { startBLEDevices(); E.showMenu(deviceSettings()) });
-            log("[BP Pair] Saved device id", id, name || "");
-            if (device && device.connected !== false && device.disconnect) return device.disconnect();
+            return disconnectDevice(device);
+        }).then(function () {
+            savePairing();
+            return restoreBLEAndShowMenu("Paired!", "BP Device", false);
         }).catch(function (e) {
             log("[BP Pair] Error", e);
-            E.showAlert("Error! " + e).then(() => { startBLEDevices(); E.showMenu(deviceSettings()) });
+            disconnectDevice(device).then(function () {
+                return restoreBLEAndShowMenu("Error! " + e, "BP Device", true);
+            });
         });
     }
     function PairTcore(id) {
@@ -186,12 +227,12 @@
             //}).then(function() {
             console.log("bonded", gatt.getSecurityStatus());
             writeSettings("bt_coreTemperature_id", id);
-            E.showAlert("Paired!").then(function () { WIDGETS['heatsuite'].startBLEDevices(); E.showMenu(deviceSettings()) });
+            E.showAlert("Paired!").then(function () { startBLEDevices().then(function () { E.showMenu(deviceSettings()); }); });
             log("Device ID paired, Done!");
             return gatt.disconnect();
         }).catch(function (e) {
             log("ERROR: " + e);
-            E.showAlert("error! " + e).then(function () { WIDGETS['heatsuite'].startBLEDevices();E.showMenu(deviceSettings()) });
+            E.showAlert("error! " + e).then(function () { startBLEDevices().then(function () { E.showMenu(deviceSettings()); }); });
         });
     }
 
@@ -483,7 +524,12 @@
             startScan();
         }).catch(function (e) {
             log("[BLE preflight] failed before settings scan", e);
-            startScan();
+            startBLEDevices().catch(function (restoreError) {
+                log("[BLE] Restore after scan preflight failed", restoreError);
+            }).then(function () {
+                return E.showAlert("Bluetooth stop failed: " + e, "Scan Error");
+            })
+                .then(function () { E.showMenu(deviceSettings()); });
         });
     }
     

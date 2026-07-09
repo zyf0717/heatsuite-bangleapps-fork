@@ -1,13 +1,12 @@
 { "id": "heatsuite",
   "name": "HeatSuite",
   "shortName":"HeatSuite",
-  "version":"0.13",
-  "author": "nravanelli",
+  "version":"0.15",
   "description": "The smartwatch software to integrate with HeatSuite",
   "icon": "icon.png",
   "type": "app",
   "tags": "health,tool",
-  "supports" : ["BANGLEJS2"],
+  "supports" : ["BANGLEJS2"],  
   "readme": "README.md",
   "dependencies" : { "bthrm":"app", "gpssetup" : "app", "coretemp":"app"},
   "customConnect": true,
@@ -19,6 +18,7 @@
     {"name":"survey","url":"heatsuite.surveylib.js"},
     {"name":"heatsuite.app.js","url":"heatsuite.app.js"},
     {"name":"heatsuite.settings.js","url":"heatsuite.settings.js"},
+    {"name":"heatsuite.default.json","url":"default.json"},
     {"name":"heatsuite.wid.js","url":"heatsuite.wid.js"},
     {"name":"heatsuite.survey.js","url":"heatsuite.survey.js"},
     {"name":"heatsuite.5sts.js","url":"heatsuite.5sts.js"},
@@ -28,20 +28,10 @@
     {"name":"heatsuite.urine.js","url":"heatsuite.urine.js"}
   ],
   "data": [
-    {
-      "name": "heatsuite.settings.json",
-      "url": "heatsuite.settings.json"
-    },
-    {
-      "name": "heatsuite.tasks.json",
-      "url": "heatsuite.tasks.json"
-    },
-    {
-      "name": "heatsuite.survey.json",
-      "url": "heatsuite.survey.json"
-    },
-    {
-      "name": "heatsuite.cache.json"
-    }
+    {"name":"heatsuite.settings.json"},
+    {"name":"heatsuite.tasks.json"},
+    {"name":"heatsuite.survey.json"},
+    {"name":"heatsuite.manifest.json"},
+    {"name":"heatsuite.cache.json"}
   ]
 }

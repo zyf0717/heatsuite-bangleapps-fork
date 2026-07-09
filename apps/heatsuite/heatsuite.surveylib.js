@@ -47,6 +47,12 @@
   function _isIntlLang() {
     return _lang && _lang.endsWith("_INTL");
   }
+  function _hasIntlFont() {
+    return Graphics.prototype.setFontIntl !== undefined;
+  }
+  function _useIntlFont() {
+    return _isIntlLang() && _hasIntlFont();
+  }
 
   function _displaySettings(question) {
     var defaultPalette = ["#8BC34A", "#FFEB3B", "#FFB74D", "#EF9A9A", "#90CAF9", "#CE93D8"];
@@ -92,7 +98,7 @@
 
   function _setResponseFont(text, maxWidth, ds) {
     text = "" + text;
-    if (_isIntlLang()) {
+    if (_useIntlFont()) {
       var intlSize = ds.intlResponseFontSize;
       g.setFont("Intl", intlSize);
       if (ds.wrapResponseText) return;
@@ -144,11 +150,11 @@
     return (lines.length * lineHeight) + ((lines.length - 1) * ds.responseLineSpacing);
   }
 
-  function _responseHeightForOptions(options, lang, ds) {
+  function _responseHeightForOptions(options, lang, ds, reservedRightW) {
     var height = ds.responseHeight;
     if (!ds.wrapResponseText) return height;
     var maxHeight = ds.responseMinHeight;
-    var maxWidth = g.getWidth() - (ds.responsePad * 2);
+    var maxWidth = g.getWidth() - (ds.responsePad * 2) - (reservedRightW || 0);
     for (var i = 0; i < options.length; i++) {
       var text = _responseText(options[i], lang);
       var lines = _responseLines(text, maxWidth, ds);
@@ -249,8 +255,13 @@
 
   function _languageFor(question) {
     var langPref = (_lang || require("locale").name || "en_GB");
+    if (langPref.endsWith("_INTL") && !_hasIntlFont()) {
+      if (question.text && question.text.en_GB) return "en_GB";
+    }
     if (question.text && question.text[langPref]) return langPref;
-    return "en_GB"; //fail-safe to always return something...
+    if (question.text && question.text.en_GB) return "en_GB";
+    var keys = question.text ? Object.keys(question.text) : [];
+    return keys.length ? keys[0] : "en_GB"; //fail-safe to always return something...
   }
 
   function _drawResponseOpts(question) {
@@ -261,7 +272,7 @@
     var height = ds.responseHeight;
     var opt = question.options;
     var resStyle = opt.type || undefined;
-
+    
     switch (resStyle){
         case "number": {
             // ranged/step input
@@ -272,13 +283,13 @@
             var units = (opt.units != undefined) ? opt.units : undefined;
             var nextMap = (opt.next != undefined) ? opt.next : {};
 
-            function nextFor(val) {
+            function nextFor(val) { 
               if (!nextMap) return 0;
               if (typeof nextMap === "string" || typeof nextMap === "number") return nextMap; //added so we can have a fixed followup for all questions
               if (typeof nextMap === "object") {
                 if(val in nextMap) return nextMap[val] | 0;
               }
-              return 0;
+              return 0;    
             }
 
             function handleResponse() {
@@ -324,13 +335,14 @@
         }
         default :{
             var options = opt.responses;
-            if (ds.wrapResponseText) height = _responseHeightForOptions(options, lang, ds);
+            var scrollBarReserveW = 6;
+            if (ds.wrapResponseText) height = _responseHeightForOptions(options, lang, ds, scrollBarReserveW);
             if (!ds.wrapResponseText && ds.autoFitResponseHeight && options.length < 5) height = Math.floor(Bangle.appRect.h / options.length);
             var contentH = options.length * height;
             var viewH = Bangle.appRect.h;
             var maxScroll = Math.max(0, contentH - viewH);
             var hasScrollBar = maxScroll > 0;
-            var scrollBarW = hasScrollBar ? 6 : 0;
+            var scrollBarW = hasScrollBar ? scrollBarReserveW : 0;
             var scroller;
             function drawScrollBar() {
                 if (!hasScrollBar) return;
@@ -418,7 +430,7 @@
 
     var out = { type:"v", c: [] };
     var QuestionTextObj = { type:"txt", label:questionText, id:"label", wrap: true, fillx: 1, filly: 1, pad: ds.questionPad };
-    QuestionTextObj.font = _isIntlLang() ? ds.intlQuestionFont : ds.questionFont;
+    QuestionTextObj.font = _useIntlFont() ? ds.intlQuestionFont : ds.questionFont;
     out.c.push(QuestionTextObj);
     var optFont = (question.optFont !== undefined) ? question.optFont : ds.nextButtonFont;
 

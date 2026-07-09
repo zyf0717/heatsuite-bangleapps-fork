@@ -25,14 +25,20 @@
         },
         {
           "t": "assert",
-          "js": "require('Storage').readJSON('heatsuite.settings.json', 1).filePrefix",
-          "is": "equal",
-          "to": "\"htst\"",
-          "text": "Packaged settings use the default file prefix"
+          "js": "!!require('Storage').read('heatsuite.default.json')",
+          "is": "true",
+          "text": "Packaged default settings file is installed"
         },
         {
           "t": "assert",
-          "js": "require('Storage').readJSON('heatsuite.tasks.json', 1).length",
+          "js": "require('Storage').readJSON('heatsuite.default.json', 1).filePrefix",
+          "is": "equal",
+          "to": "\"htst\"",
+          "text": "Packaged defaults use the default file prefix"
+        },
+        {
+          "t": "assert",
+          "js": "require('HSModule').getSettings().StudyTasks.length",
           "is": "equal",
           "to": "0",
           "text": "Packaged task list starts empty"

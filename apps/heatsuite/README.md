@@ -51,13 +51,6 @@ The `Searching...` text at the bottom of the screen shows that the watch is sear
 
 _Note: This will only show when a bluetooth device is associated with a task._
 
-## CORE Sensor recording
-
-HeatSuite installs CoreTemp as the CORE BLE runtime provider, but CORE recording
-is on by default. Disable the `CORE Sensor` recorder in HeatSuite settings when
-CORE samples should not be included in HeatSuite minute data. HeatSuite does not
-turn on CoreTemp's standalone background `Enable` setting.
-
 ## Why does swiping right open the HeatSuite App?
 
 The objective of HeatSuite was to make data collection in the field easier for participants. By default, swiping right when the HeatSuite widget is visible will open the app. This can be toggled off in the app settings.

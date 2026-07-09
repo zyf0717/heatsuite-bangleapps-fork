@@ -19,15 +19,19 @@ function stopBLEDevices() {
   return Promise.resolve();
 }
 
-function loadBPTaskApp() {
+function loadTaskApp(appFile, label) {
   NRF.setScan();
   stopBLEDevices().then(function () {
     NRF.setScan();
-    Bangle.load('heatsuite.bp.js');
+    Bangle.load(appFile);
   }).catch(function (e) {
-    modHS.log("Failed to stop BLE before BP task: " + e);
-    Bangle.load('heatsuite.bp.js');
+    modHS.log("Failed to stop BLE before " + label + " task: " + e);
+    Bangle.load(appFile);
   });
+}
+
+function loadBPTaskApp() {
+  loadTaskApp('heatsuite.bp.js', "BP");
 }
 
 function queueNRFFindDeviceTimeout() {
@@ -51,8 +55,7 @@ function findBtDevices() {
       if (NRFFindDeviceTimeout) clearTimeout(NRFFindDeviceTimeout);
       if (TaskScreenTimeout) clearTimeout(TaskScreenTimeout);
       NRF.setScan();
-      WIDGETS['heatsuite'].stopBLEDevices();
-      Bangle.load(appFile);
+      loadTaskApp(appFile, label);
       return true;
     }
     if (devices.length !== 0) {
