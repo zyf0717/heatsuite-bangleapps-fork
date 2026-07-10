@@ -29,8 +29,7 @@ module.exports = [
         sfloat(80),
         sfloat(93)
       ]));
-      assert.strictEqual(result.deviceId, "bp-1");
-      assert.strictEqual(result.rawFlags, 0);
+      assert.strictEqual(result.peripheral_id, "bp-1");
       assert.strictEqual(result.unit, "mmHg");
       assert.strictEqual(result.sbp, 120);
       assert.strictEqual(result.dbp, 80);
@@ -122,8 +121,7 @@ module.exports = [
         [0x02, 0x00]
       ]), "bp-abc");
       assert.deepStrictEqual(JSON.parse(JSON.stringify(result)), {
-        deviceId: "bp-abc",
-        rawFlags: 0x1E,
+        peripheral_id: "bp-abc",
         unit: "mmHg",
         sbp: 120,
         dbp: 80,

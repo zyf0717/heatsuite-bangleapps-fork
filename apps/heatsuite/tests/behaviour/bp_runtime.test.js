@@ -167,8 +167,7 @@ module.exports = [
       assert.strictEqual(loaded.saved[0].type, "bpres");
       assert.strictEqual(loaded.saved[0].task, "bloodPressure");
       assert.deepStrictEqual(Object.keys(loaded.saved[0].data), [
-        "deviceId",
-        "rawFlags",
+        "peripheral_id",
         "unit",
         "sbp",
         "dbp",
@@ -188,7 +187,7 @@ module.exports = [
         "bodyMovementDetected",
         "measurementPositionImproper"
       ]);
-      assert.strictEqual(loaded.saved[0].data.deviceId, "bp-1");
+      assert.strictEqual(loaded.saved[0].data.peripheral_id, "bp-1");
       assert.strictEqual(loaded.saved[0].data.sbp, 120);
       assert.strictEqual(loaded.saved[0].data.dbp, 80);
       assert.strictEqual(loaded.saved[0].data.hr, 70);

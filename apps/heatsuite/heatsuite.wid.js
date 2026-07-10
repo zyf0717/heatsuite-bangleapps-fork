@@ -1030,6 +1030,9 @@
 
   resumeCoreAfterTask().then(function () {
     startRecorder();
+  }, function (err) {
+    modHS.log("CORESensor resume failed during startup: " + err);
+    startRecorder();
   });
   runScheduledInit();
 
