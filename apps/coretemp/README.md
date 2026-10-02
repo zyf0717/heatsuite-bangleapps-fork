@@ -106,8 +106,8 @@ npx eslint --max-warnings 0 apps/coretemp/*.js apps/coretemp/tests
 git diff --check
 ```
 
-Tests simulate BLE and include migration and installer packaging. Watch
-acceptance for 0.12 is **pending**; record firmware versions and partial logs:
+Tests simulate BLE and include migration and installer packaging. Optional
+on-watch checks can record firmware versions and partial logs:
 
 - Cold discovery: upgrade/rebuild, verify readings and HRM Status; retain saved IDs.
 - Cached reconnect: reuse handles and receive one event per notification.
