@@ -100,7 +100,7 @@ module.exports = [
       assert.strictEqual(ble.measurementChar.notificationsStarted, false);
       const labels = labelsFromLayout(loaded.layouts[loaded.layouts.length - 1]);
       assert.ok(labels.includes("ERROR!"));
-      assert.ok(labels.includes("Disconnected"));
+      assert.ok(labels.includes("BP disconnected"));
     }
   },
   {
@@ -112,7 +112,7 @@ module.exports = [
       assert.strictEqual(ble.measurementChar.notificationsStarted, false);
       const labels = labelsFromLayout(loaded.layouts[loaded.layouts.length - 1]);
       assert.ok(labels.includes("ERROR!"));
-      assert.ok(labels.includes("BP cuff is not paired. Pair in Settings with START held until PR."));
+      assert.ok(labels.includes("BP cuff is not paired. Put cuff in pairing mode and pair in Settings."));
     }
   },
   {
@@ -155,7 +155,7 @@ module.exports = [
       assert.strictEqual(ble.measurementChar.notificationsStarted, false);
       const labels = labelsFromLayout(loaded.layouts[loaded.layouts.length - 1]);
       assert.ok(labels.includes("ERROR!"));
-      assert.ok(labels.includes("BP cuff is not paired. Pair in Settings with START held until PR."));
+      assert.ok(labels.includes("BP cuff is not paired. Put cuff in pairing mode and pair in Settings."));
     }
   },
   {
@@ -185,9 +185,11 @@ module.exports = [
         "irregularPulse",
         "improperMeasure",
         "bodyMovementDetected",
-        "measurementPositionImproper"
+        "measurementPositionImproper",
+        "device_model"
       ]);
       assert.strictEqual(loaded.saved[0].data.peripheral_id, "bp-1");
+      assert.strictEqual(loaded.saved[0].data.device_model, "unknown");
       assert.strictEqual(loaded.saved[0].data.sbp, 120);
       assert.strictEqual(loaded.saved[0].data.dbp, 80);
       assert.strictEqual(loaded.saved[0].data.hr, 70);
@@ -198,6 +200,40 @@ module.exports = [
       assert.strictEqual(ble.device.disconnectCalls, 1);
       const labels = labelsFromLayout(loaded.layouts[loaded.layouts.length - 1]);
       assert.ok(labels.includes("Saved!"));
+    }
+  },
+  {
+    name: "waiting animation advances and stops on app kill",
+    async fn() {
+      const { loaded } = await setupCollector({ bonded: true });
+      assert.strictEqual(loaded.context.layout.waiting.label, "Waiting.  ");
+      assert.strictEqual(loaded.timers.runByMs(500), 1);
+      assert.strictEqual(loaded.context.layout.waiting.label, "Waiting.. ");
+      assert.strictEqual(loaded.timers.runByMs(500), 1);
+      assert.strictEqual(loaded.context.layout.waiting.label, "Waiting...");
+      loaded.context.E.emit("kill");
+      assert.strictEqual(loaded.timers.runByMs(500), 0);
+    }
+  },
+  {
+    name: "unavailable pressures are ignored until a valid measurement arrives",
+    async fn() {
+      const { ble, loaded } = await setupCollector({ bonded: true });
+      for (const raw of [0x07FE, 0x0802, 0x07FF, 0x0800, 0x0801]) {
+        for (const offset of [1, 3]) {
+          const bytes = measurementPacket();
+          bytes.splice(offset, 2, ...sfloat(raw));
+          ble.measurementChar.emitValue(bytes);
+        }
+      }
+      assert.strictEqual(loaded.saved.length, 0);
+      assert.strictEqual(ble.device.disconnectCalls, 0);
+      assert.ok(loaded.timers.timers.some(t => t.ms === 120000 && !t.cleared));
+      ble.measurementChar.emitValue(measurementPacket());
+      assert.strictEqual(loaded.saved.length, 1);
+      assert.strictEqual(loaded.timers.runByMs(500), 0);
+      loaded.timers.runByMs(1);
+      assert.strictEqual(loaded.loads.length, 1);
     }
   },
   {
@@ -225,14 +261,12 @@ module.exports = [
     }
   },
   {
-    name: "success path schedules exit",
+    name: "success path exits after indication idle timeout",
     async fn() {
       const { ble, loaded } = await setupCollector({ bonded: true });
       ble.measurementChar.emitValue(measurementPacket());
       assert.strictEqual(loaded.loads.length, 0);
       loaded.timers.runByMs(1);
-      assert.strictEqual(loaded.loads.length, 0);
-      loaded.timers.runByMs(10000);
       assert.strictEqual(loaded.loads.length, 1);
     }
   },

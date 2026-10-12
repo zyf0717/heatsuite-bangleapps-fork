@@ -22,6 +22,25 @@ function parse(bytes, deviceId) {
 
 module.exports = [
   {
+    name: "records the configured cuff model without its device suffix",
+    fn() {
+      const cases = [
+        ["UA-1200BLE_123456", "UA1200BLE"],
+        ["A&D_UA-651BLE_123456", "UA651BLE"],
+        ["A&D_UA-651", "UA651BLE"],
+        ["", "unknown"],
+        [undefined, "unknown"]
+      ];
+      for (const [name, model] of cases) {
+        const loaded = loadBP.create({ settings: { bt_bloodPressure_name: name } });
+        const result = loaded.exports.parseBPMeasurement(packet(0, [
+          sfloat(120), sfloat(80), sfloat(93)
+        ]), "bp-1");
+        assert.strictEqual(result.device_model, model);
+      }
+    }
+  },
+  {
     name: "decodes minimal mmHg measurement",
     fn() {
       const result = parse(packet(0x00, [
@@ -139,7 +158,8 @@ module.exports = [
         irregularPulse: 0,
         improperMeasure: 0,
         bodyMovementDetected: 0,
-        measurementPositionImproper: 0
+        measurementPositionImproper: 0,
+        device_model: "unknown"
       });
     }
   },
