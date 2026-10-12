@@ -1,3 +1,7 @@
+function _requiresPairing(taskId) {
+    return taskId === "bloodPressure" || taskId === "coreTemperature";
+}
+
 function _getSettings() {
     var out = Object.assign(
         require('Storage').readJSON("heatsuite.default.json", true) || {},
@@ -247,10 +251,7 @@ function _getCache() {
     return require('Storage').readJSON("heatsuite.cache.json", true) || {};
 }
 function _writeCache(cache) {
-    var oldCache = _getCache();
-    if (JSON.stringify(oldCache) !== JSON.stringify(cache)) {
-        require('Storage').writeJSON("heatsuite.cache.json", cache);
-    }
+    require('Storage').writeJSON("heatsuite.cache.json", cache);
     return cache;
 }
 function _clearCache() {
@@ -324,6 +325,7 @@ function _log(msg) {
     }
   }
 exports = {
+    requiresPairing: _requiresPairing,
     getSettings: _getSettings,
     getRecordFile: _getRecordFile,
     saveDataToFile: _saveDataToFile,

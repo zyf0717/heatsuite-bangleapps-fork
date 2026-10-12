@@ -5,6 +5,10 @@
     var studyTasksJSON = "heatsuite.tasks.json";
     var BP_SERVICE_UUID = "1810";
     var BP_DATE_TIME_UUID = "2A08";
+    var pairingFilters = {
+        bloodPressure: [{ namePrefix: "A&D_UA-651BLE_" }, { namePrefix: "UA-1200BLE_" }],
+        coreTemperature: [{ namePrefix: "BLEThermistorPod" }]
+    };
 
     function log() {
         if (!settings.DEBUG && !settings.SAVE_DEBUG) return;
@@ -258,7 +262,7 @@
         var menu = { '< Back': function () { E.showMenu(mainMenuSettings()); } };
         menu[''] = { 'title': 'Devices' };
         settings.StudyTasks.forEach(task => {
-            if (task.btPair === undefined || !task.btPair) return;
+            if (!modHS.requiresPairing(task.id)) return;
             let key = task.id; // Adjust based on how you identify tasks
             let id = "bt_" + key + "_id";
             if (settings[id] !== undefined) {
@@ -272,7 +276,7 @@
                     });
                 };
             } else {
-                menu["Pair " + key] = () => createMenuFromScan(key, task.btInfo.service);
+                menu["Pair " + key] = () => createMenuFromScan(key);
             }
         });
         return menu;
@@ -495,16 +499,16 @@
         return menu;
     }
 
-    function createMenuFromScan(type, service) {
+    function createMenuFromScan(type) {
         E.showMenu();
         E.showMessage("Scanning for 4 seconds");
         var submenu_scan = {
             '< Back': function () { startBLEDevices(); E.showMenu(deviceSettings()); }
         };
         function startScan() {
-            var filters = [{ services: [service] }];
-            // UA1200 pairing mode advertises its custom service instead of 1810.
-            if (type === "bloodPressure") filters.push({ namePrefix: "UA-1200BLE_" });
+            // Match supported devices by name, including UA1200 pairing advertisements
+            // that do not include the standard blood-pressure service.
+            var filters = pairingFilters[type];
             NRF.findDevices(function (devices) {
                 submenu_scan[''] = { title: `Scan (${devices.length} found)` };
                 if (devices.length === 0) {

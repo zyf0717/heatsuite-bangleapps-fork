@@ -190,14 +190,14 @@ function draw() {
       btn.btnFaceCol = "#FFFF00";
     }
     //no bt paired
-    if (task.btPair === true) {
+    if (modHS.requiresPairing(task.id)) {
       if (settings["bt_" + task.id + "_id"] === undefined || !settings["bt_" + task.id + "_id"]) {
         //make it clickable so we can go to settings and pair something
         btn.btnFaceCol = "#FF0000";
         btn.cb = l => eval(require("Storage").read("heatsuite.settings.js"))(()=>load("heatsuite.app.js"));
       }
     }
-    if(task.btInfo !== undefined){
+    if (["bloodPressure", "coreTemperature", "bodyMass"].includes(task.id)) {
       btRequired = true;//we will be scanning for bluetooth devices
     }
     //builder for each icon in taskScreen

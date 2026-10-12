@@ -39,3 +39,4 @@
 0.18: Guard BP measurement setup and pairing against disconnects and late BLE results
       Added support for the UA1200BLE Blood Pressure Cuff (Manual measurements only)
       BP logging includes device_model name
+      `heatsuite.surveylib.js` fixed redundant cache memory use

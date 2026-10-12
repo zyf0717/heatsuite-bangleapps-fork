@@ -9,7 +9,6 @@
   var _scrollInterval = undefined;
   var _timeoutHandle = undefined;
   var _settingsCache = undefined;
-  var _cacheCache = undefined;
   var _lang;
 
   // --------- small utils ----------
@@ -28,11 +27,8 @@
     return _settingsCache;
   }
   function _cache() {
-    if (!_cacheCache) {
-      try { _cacheCache = (_opts && _opts.getCache ? _opts.getCache() : {}) || {}; }
-      catch (e) { _cacheCache = {}; }
-    }
-    return _cacheCache;
+    try { return (_opts && _opts.getCache ? _opts.getCache() : {}) || {}; }
+    catch (e) { return {}; }
   }
   function _log(m) {
     var s = _settings();
@@ -469,7 +465,6 @@
   function init(opts) {
     _opts = _mergeDefined({ timeoutMs: 180000, buzz: true }, opts || {});
     _settingsCache = undefined;
-    _cacheCache = undefined;
 
     if (_opts.surveyObj) _survey = _opts.surveyObj;
     else if (_opts.surveyFilename) _survey = _loadSurveyFromFilename(_opts.surveyFilename);
